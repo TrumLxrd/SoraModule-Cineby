@@ -1,19 +1,19 @@
 {
-   "sourceName": "Cineby",
-   "iconUrl": "https://www.cineby.app/logo.png",
-   "author": {
-       "name": "trumy",
-       "icon": "https://w7.pngwing.com/pngs/478/614/png-transparent-drake-rapper-drake-s-views-moustache-jaw.png",
-       "url": "https://github.com/TrumLxrd"
-   },
-   "version": "1.0.0",
-   "language": "English (DUB)",
-   "streamType": "HLS",
-   "quality": "720p",
-   "baseUrl": "https://www.cineby.app/",
-   "searchBaseUrl": "https://www.cineby.app/search?q=%s",
-   "scriptUrl": "https://github.com/TrumLxrd/SoraModule-Cineby/blob/bc1c4d278d2abe49b78dd9a064b599b664c5d7c6/Scraper.js",
-   "type": "movies/shows",
-   "asyncJS": true,
-   "softsub": true
+    "sourceName": "Cineby",
+    "iconUrl": "https://raw.githubusercontent.com/your-username/sora-cineby-module/refs/heads/main/cineby/icon.png",
+    "author": {
+        "name": "Community",
+        "icon": "https://raw.githubusercontent.com/your-username/sora-cineby-module/refs/heads/main/profile.jpg",
+        "url": "https://github.com/your-username"
+    },
+    "version": "1.0.0",
+    "language": "English",
+    "streamType": "HLS",
+    "quality": "1080p",
+    "baseUrl": "https://www.cineby.app/",
+    "searchBaseUrl": "https://www.cineby.app/search?q=%s",
+    "scriptUrl": "https://raw.githubusercontent.com/your-username/sora-cineby-module/refs/heads/main/cineby/cineby.js",
+    "type": "movies",
+    "asyncJS": true,
+    "softsub": true
 }
