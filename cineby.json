@@ -13,6 +13,6 @@
    "searchBaseUrl": "https://www.cineby.app/search?q=%s",
    "scriptUrl": "https://github.com/TrumLxrd/SoraModule-Cineby/blob/bc1c4d278d2abe49b78dd9a064b599b664c5d7c6/Scraper.js",
    "asyncJS": true,
-   "streamAsyncJS": false,
+   "type": "movies/shows",
    "softsub": true
 }
