@@ -1,0 +1,14 @@
+{
+  "name": "Cineby",
+  "author": "trumy",
+  "version": "1.0.0",
+  "description": "Scraper for Cineby.app movie streaming site",
+  "language": "en",
+  "baseUrl": "https://www.cineby.app",
+  "searchUrl": "https://www.cineby.app/search?q={query}",
+  "scriptUrl": "https://your-hosting-url.com/cineby.js",
+  "type": "movie & series",
+  "streamType": "mp4",
+  "quality": "1080p",
+  "async": true
+}
