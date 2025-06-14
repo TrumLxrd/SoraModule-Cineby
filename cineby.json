@@ -6,7 +6,7 @@
   "language": "en",
   "baseUrl": "https://www.cineby.app",
   "searchUrl": "https://www.cineby.app/search?q={query}",
-  "scriptUrl": "https://your-hosting-url.com/cineby.js",
+  "scriptUrl": "Scraper.js",
   "type": "movie & series",
   "streamType": "mp4",
   "quality": "1080p",
