@@ -1,14 +1,20 @@
 {
-  "name": "Cineby",
-  "author": "trumy",
+  "sourceName": "Cineby",
+  "iconUrl": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/film.svg",
+  "author": {
+    "name": "trumy",
+    "icon": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/github.svg"
+  },
   "version": "1.0.0",
-  "description": "Scraper for Cineby.app movie streaming site",
-  "language": "en",
-  "baseUrl": "https://www.cineby.app",
-  "searchUrl": "https://www.cineby.app/search?q={query}",
-  "scriptUrl": "https://github.com/TrumLxrd/SoraModule-Cineby/blob/8bb92ec2bbbce89a00edde8305bbe23a8f727c75/Scraper.js",
-  "type": "movie & series",
-  "streamType": "mp4",
+  "language": "Multi-Language",
+  "streamType": "MP4",
   "quality": "1080p",
-  "async": true
+  "baseUrl": "https://www.cineby.app/",
+  "searchBaseUrl": "https://www.cineby.app/search?q=%s",
+  "scriptUrl": "https://github.com/TrumLxrd/SoraModule-Cineby/blob/d9c3bdf16691fb3522ffd0ac84676dca5c9bc017/Scraper.js",
+  "asyncJS": true,
+  "streamAsyncJS": false,
+  "softsub": false,
+  "type": "movies"
 }
+
