@@ -6,7 +6,7 @@
   "language": "en",
   "baseUrl": "https://www.cineby.app",
   "searchUrl": "https://www.cineby.app/search?q={query}",
-  "scriptUrl": "Scraper.js",
+  "scriptUrl": "https://github.com/TrumLxrd/SoraModule-Cineby/blob/8bb92ec2bbbce89a00edde8305bbe23a8f727c75/Scraper.js",
   "type": "movie & series",
   "streamType": "mp4",
   "quality": "1080p",
