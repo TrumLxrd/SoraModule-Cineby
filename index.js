@@ -3,6 +3,9 @@ class cineby {
         this.name = "Cineby";
         this.baseUrl = "https://www.cineby.app";
         this.search_url = `${this.baseUrl}/search/`;
+        this.tmdb_api_key = "d9956abacedb5b43a16cc4864b26d451";
+        this.tmdb_search_url = "https://api.themoviedb.org/3/search/";
+        this.tmdb_image_base = "https://image.tmdb.org/t/p/w500";
         this.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -18,59 +21,45 @@ class cineby {
             return [];
         }
         
-        const search_query = encodeURIComponent(query);
-        const search_url = `${this.search_url}?q=${search_query}`;
-        
         try {
-            const response = await fetch(search_url, { headers: this.headers });
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            // Search TMDB for results
+            console.log(`Searching TMDB for ${type_}: ${query}`);
+            const tmdb_url = `${this.tmdb_search_url}${type_}?api_key=${this.tmdb_api_key}&query=${encodeURIComponent(query)}&include_adult=true`;
+            
+            const tmdb_response = await fetch(tmdb_url);
+            if (!tmdb_response.ok) {
+                throw new Error(`TMDB HTTP error! status: ${tmdb_response.status}`);
             }
             
-            const html = await response.text();
-            console.log("Search response received, length:", html.length);
+            const tmdb_data = await tmdb_response.json();
+            console.log(`TMDB returned ${tmdb_data.results.length} results`);
             
-            const results = [];
-            
-            // Regex pattern to extract search results
-            const search_pattern = /<a[^>]+href="([^"]+)"[^>]*>.*?<img[^>]*src="([^"]+)"[^>]*>.*?<div[^>]*class="[^"]*text-sm[^"]*font-semibold[^"]*"[^>]*>(.*?)<\/div>.*?<div[^>]*class="[^"]*text-xs[^"]*uppercase[^"]*"[^>]*>(.*?)<\/div>/gs;
-            
-            let match;
-            while ((match = search_pattern.exec(html)) !== null) {
-                const item_url = match[1];
-                const img_url = match[2];
-                const title = match[3].replace(/<.*?>/g, '').trim();
-                const item_type = match[4].replace(/<.*?>/g, '').trim().toLowerCase();
-                
-                console.log("Found item:", title, item_type);
-                
-                // Type checking using regex
-                const isMovie = type_ === 'movie' && 
-                    (/film|movie/i.test(item_type) || 
-                    !/serie|série|show/i.test(item_type));
-                    
-                const isTv = type_ === 'tv' && 
-                    (/série|serie|show|tv/i.test(item_type));
-                    
-                if (isMovie || isTv) {
-                    const year_match = /\((\d{4})\)/.exec(title);
-                    const year = year_match ? year_match[1] : "";
-                    
-                    let clean_title = title;
-                    if (year) {
-                        clean_title = title.replace(`(${year})`, "").trim();
-                    }
-                    
-                    results.push({
-                        'title': clean_title,
-                        'url': /^https?:\/\//.test(item_url) ? item_url : this.baseUrl + item_url,
-                        'img': /^https?:\/\//.test(img_url) ? img_url : (/^\//.test(img_url) ? this.baseUrl + img_url : this.baseUrl + '/' + img_url),
-                        'year': year
-                    });
-                }
+            if (!tmdb_data.results || tmdb_data.results.length === 0) {
+                return [];
             }
             
-            console.log("Search results:", results.length);
+            // Map TMDB results to our format
+            const results = tmdb_data.results.slice(0, 15).map(item => {
+                const title = type_ === 'movie' ? item.title : item.name;
+                const year = item.release_date ? item.release_date.substring(0, 4) : 
+                            (item.first_air_date ? item.first_air_date.substring(0, 4) : "");
+                const poster = item.poster_path ? `${this.tmdb_image_base}${item.poster_path}` : "";
+                
+                // Create the search URL for cineby
+                // We'll search for each item individually on cineby.app
+                const cineby_search = `${this.search_url}?q=${encodeURIComponent(title)}`;
+                
+                return {
+                    'title': title,
+                    'url': cineby_search,
+                    'img': poster,
+                    'year': year,
+                    'tmdb_id': item.id,
+                    'tmdb_type': type_
+                };
+            });
+            
+            console.log(`Processed ${results.length} search results`);
             return results;
             
         } catch (e) {
@@ -81,23 +70,49 @@ class cineby {
     
     async get_sources(url) {
         try {
+            console.log("Getting sources for URL:", url);
+            // First, we need to actually find the content on cineby
+            // The URL we got from search is just a search URL, not a direct content URL
+            
             const response = await fetch(url, { headers: this.headers });
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
             const html = await response.text();
-            console.log("Get sources response received, length:", html.length);
+            console.log("Search response received for content lookup, length:", html.length);
+            
+            // Extract the first search result URL
+            const result_pattern = /<a\s+href="([^"]+)"[^>]*class="group flex flex-col[^>]*>/;
+            const result_match = html.match(result_pattern);
+            
+            if (!result_match) {
+                console.error("No content match found on cineby.app");
+                return [];
+            }
+            
+            const content_url = result_match[1];
+            const full_content_url = /^https?:\/\//.test(content_url) ? content_url : this.baseUrl + content_url;
+            console.log("Found content URL:", full_content_url);
+            
+            // Now get the actual content page
+            const content_response = await fetch(full_content_url, { headers: this.headers });
+            if (!content_response.ok) {
+                throw new Error(`HTTP error getting content! status: ${content_response.status}`);
+            }
+            
+            const content_html = await content_response.text();
+            console.log("Content page received, length:", content_html.length);
             
             // Check if this is a TV show using regex
-            const seasons_check = /<div\s+role="tablist".*?>.*?Season/is.test(html);
+            const seasons_check = /<div\s+role="tablist".*?>.*?Season/is.test(content_html);
             
             if (seasons_check) {
                 console.log("Detected TV show content");
-                return this._extract_tv_sources(html, url);
+                return this._extract_tv_sources(content_html, full_content_url);
             } else {
                 console.log("Detected movie content");
-                return this._extract_movie_sources(html, url);
+                return this._extract_movie_sources(content_html, full_content_url);
             }
                 
         } catch (e) {
