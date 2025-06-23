@@ -30,10 +30,9 @@ class cineby {
             const html = await response.text();
             console.log("Search response received, length:", html.length);
             
-            // Use regex to find all search result items
             const results = [];
             
-            // More relaxed pattern that might catch more results
+            // Regex pattern to extract search results
             const search_pattern = /<a[^>]+href="([^"]+)"[^>]*>.*?<img[^>]*src="([^"]+)"[^>]*>.*?<div[^>]*class="[^"]*text-sm[^"]*font-semibold[^"]*"[^>]*>(.*?)<\/div>.*?<div[^>]*class="[^"]*text-xs[^"]*uppercase[^"]*"[^>]*>(.*?)<\/div>/gs;
             
             let match;
@@ -45,17 +44,16 @@ class cineby {
                 
                 console.log("Found item:", title, item_type);
                 
-                // Less strict type checking
+                // Type checking using regex
                 const isMovie = type_ === 'movie' && 
-                    (item_type.includes('film') || item_type.includes('movie') || 
-                    !item_type.includes('serie') && !item_type.includes('série') && !item_type.includes('show'));
+                    (/film|movie/i.test(item_type) || 
+                    !/serie|série|show/i.test(item_type));
                     
                 const isTv = type_ === 'tv' && 
-                    (item_type.includes('série') || item_type.includes('serie') || 
-                    item_type.includes('show') || item_type.includes('tv'));
+                    (/série|serie|show|tv/i.test(item_type));
                     
                 if (isMovie || isTv) {
-                    const year_match = title.match(/\((\d{4})\)/);
+                    const year_match = /\((\d{4})\)/.exec(title);
                     const year = year_match ? year_match[1] : "";
                     
                     let clean_title = title;
@@ -65,8 +63,8 @@ class cineby {
                     
                     results.push({
                         'title': clean_title,
-                        'url': item_url.startsWith('http') ? item_url : this.baseUrl + item_url,
-                        'img': img_url.startsWith('http') ? img_url : (img_url.startsWith('/') ? this.baseUrl + img_url : this.baseUrl + '/' + img_url),
+                        'url': /^https?:\/\//.test(item_url) ? item_url : this.baseUrl + item_url,
+                        'img': /^https?:\/\//.test(img_url) ? img_url : (/^\//.test(img_url) ? this.baseUrl + img_url : this.baseUrl + '/' + img_url),
                         'year': year
                     });
                 }
@@ -91,15 +89,13 @@ class cineby {
             const html = await response.text();
             console.log("Get sources response received, length:", html.length);
             
-            // Check if this is a TV show (has seasons) using regex
-            const seasons_check = html.match(/<div\s+role="tablist".*?>.*?Season/is);
+            // Check if this is a TV show using regex
+            const seasons_check = /<div\s+role="tablist".*?>.*?Season/is.test(html);
             
             if (seasons_check) {
-                // TV Show
                 console.log("Detected TV show content");
                 return this._extract_tv_sources(html, url);
             } else {
-                // Movie
                 console.log("Detected movie content");
                 return this._extract_movie_sources(html, url);
             }
@@ -113,25 +109,25 @@ class cineby {
     _extract_movie_sources(html_content, url) {
         const sources = [];
         
-        // Find the player iframe using regex
-        const iframe_pattern = /<iframe.*?src="([^"]+)"/;
-        const iframe_match = html_content.match(iframe_pattern);
+        // Find iframe sources
+        const iframe_pattern = /<iframe.*?src="([^"]+)"/g;
+        let iframe_match;
         
-        if (iframe_match) {
+        while ((iframe_match = iframe_pattern.exec(html_content)) !== null) {
             let iframe_src = iframe_match[1];
-            if (!iframe_src.startsWith('http')) {
-                iframe_src = iframe_src.startsWith('//') ? 'https:' + iframe_src : this.baseUrl + iframe_src;
+            if (!/^https?:\/\//.test(iframe_src)) {
+                iframe_src = /^\/\//.test(iframe_src) ? 'https:' + iframe_src : this.baseUrl + iframe_src;
             }
             
             console.log("Found iframe source:", iframe_src);
             sources.push({
                 'url': iframe_src,
-                'title': 'Default Source',
+                'title': 'Iframe Source',
                 'type': 'iframe'
             });
         }
         
-        // Find direct video sources from script tags
+        // Find sources in script tags
         const sources_pattern = /sources:\s*\[\s*{\s*file:\s*"([^"]+)"/g;
         let sources_match;
         let i = 1;
@@ -145,35 +141,35 @@ class cineby {
             });
         }
         
-        // Additional pattern for video URLs
-        const alt_pattern = /file:\s*"(https?:\/\/[^"]+\.(?:mp4|m3u8))"/g;
-        let alt_match;
+        // Find m3u8/mp4 URLs
+        const video_url_pattern = /file:\s*"(https?:\/\/[^"]+\.(?:mp4|m3u8|mkv))"/g;
+        let video_url_match;
         let j = 1;
         
-        while ((alt_match = alt_pattern.exec(html_content)) !== null) {
-            const video_url = alt_match[1];
+        while ((video_url_match = video_url_pattern.exec(html_content)) !== null) {
+            const video_url = video_url_match[1];
             if (!sources.some(s => s.url === video_url)) {
-                console.log("Found alternative source:", video_url);
+                console.log("Found video URL:", video_url);
                 sources.push({
                     'url': video_url,
-                    'title': `Alternative Source ${j++}`,
+                    'title': `Video ${j++}`,
                     'type': 'direct'
                 });
             }
         }
         
-        // Look for any other video player elements
-        const video_pattern = /<video[^>]*>\s*<source[^>]*src="([^"]+)"/g;
-        let video_match;
+        // Find source tags
+        const source_tag_pattern = /<source[^>]*src="([^"]+)"[^>]*>/g;
+        let source_tag_match;
         let k = 1;
         
-        while ((video_match = video_pattern.exec(html_content)) !== null) {
-            const video_url = video_match[1];
+        while ((source_tag_match = source_tag_pattern.exec(html_content)) !== null) {
+            const video_url = source_tag_match[1];
             if (!sources.some(s => s.url === video_url)) {
-                console.log("Found video element source:", video_url);
+                console.log("Found source tag:", video_url);
                 sources.push({
-                    'url': video_url,
-                    'title': `Video Source ${k++}`,
+                    'url': /^https?:\/\//.test(video_url) ? video_url : this.baseUrl + video_url,
+                    'title': `Source Tag ${k++}`,
                     'type': 'direct'
                 });
             }
@@ -193,7 +189,7 @@ class cineby {
             const active_season = active_season_match ? active_season_match[1] : "1";
             console.log("Active season:", active_season);
             
-            // Find episodes for the active season
+            // Find episodes
             const episode_pattern = /<a\s+href="([^"]+)"[^>]*class="block[^>]*>.*?<span[^>]*class="[^"]*font-medium[^"]*"[^>]*>Episode\s+(\d+)[^<]*<\/span>/gs;
             let episode_match;
             
@@ -202,7 +198,7 @@ class cineby {
                 const episode_num = episode_match[2];
                 console.log("Found episode:", episode_num, episode_url);
                 
-                const full_url = episode_url.startsWith('http') ? episode_url : this.baseUrl + episode_url;
+                const full_url = /^https?:\/\//.test(episode_url) ? episode_url : this.baseUrl + episode_url;
                 sources.push({
                     'url': full_url,
                     'title': `Season ${active_season} Episode ${episode_num}`,
@@ -210,17 +206,17 @@ class cineby {
                 });
             }
             
-            // If no episodes found with the above pattern, try a more general one
+            // Alternative episode pattern
             if (sources.length === 0) {
-                console.log("No episodes found with primary pattern, trying alternative...");
+                console.log("Trying alternative episode pattern...");
                 const alt_episode_pattern = /<a\s+href="([^"]+)"[^>]*>.*?Episode\s+(\d+).*?<\/a>/gs;
                 
                 while ((episode_match = alt_episode_pattern.exec(html_content)) !== null) {
                     const episode_url = episode_match[1];
                     const episode_num = episode_match[2];
-                    console.log("Found episode (alt pattern):", episode_num, episode_url);
+                    console.log("Found episode (alt):", episode_num, episode_url);
                     
-                    const full_url = episode_url.startsWith('http') ? episode_url : this.baseUrl + episode_url;
+                    const full_url = /^https?:\/\//.test(episode_url) ? episode_url : this.baseUrl + episode_url;
                     sources.push({
                         'url': full_url,
                         'title': `Season ${active_season} Episode ${episode_num}`,
