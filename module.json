@@ -1,0 +1,10 @@
+{
+    "name": "Cineby",
+    "version": "1.0.0",
+    "description": "Scraper module for cineby.app",
+    "author": "trumy",
+    "url": "https://www.cineby.app/",
+    "image": "https://www.cineby.app/favicon.ico",
+    "types": ["movie", "tv"],
+    "baseUrl": "https://www.cineby.app"
+}
