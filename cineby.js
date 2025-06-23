@@ -1,178 +1,63 @@
 // Filename: cineby.js
 
-function Cineby() {
-    this.name = "Cineby";
-    this.baseUrl = "https://www.cineby.app";
-    this.tmdbKey = "d9956abacedb5b43a16cc4864b26d451";
-    // Using TMDB multi-search, just like the net3lix module
-    this.searchUrl = "https://api.themoviedb.org/3/search/multi?api_key=" + this.tmdbKey + "&language=en-US&include_adult=true&query=";
-    this.imageBase = "https://image.tmdb.org/t/p/w500";
-    this.cinebySearchPath = this.baseUrl + "/search/?q=";
-    this.headers = {
+// --- Configuration ---
+var CINEBY_CONFIG = {
+    name: "Cineby",
+    baseUrl: "https://www.cineby.app",
+    tmdbKey: "d9956abacedb5b43a16cc4864b26d451",
+    searchUrl: "https://api.themoviedb.org/3/search/multi",
+    detailsUrl: "https://api.themoviedb.org/3",
+    imageBase: "https://image.tmdb.org/t/p/w500",
+    headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    };
-}
-
-/**
- * Search for movies or TV shows using TMDB.
- * Returns a Promise that resolves with an array of search results.
- */
-Cineby.prototype.search = function(query, type) {
-    var self = this;
-    // This returns the fetch promise chain directly, which is what Sora expects.
-    return fetch(self.searchUrl + encodeURIComponent(query))
-        .then(function(res) {
-            return res.json();
-        })
-        .then(function(json) {
-            var results = [];
-            // Use forEach loop, similar to the example
-            (json.results || []).forEach(function(item) {
-                // Filter results to only match the requested type (movie or tv)
-                if ((type === "movie" && item.media_type !== "movie") || (type === "tv" && item.media_type !== "tv")) {
-                    return; // Skip if it's not the right type
-                }
-                var title = item.media_type === "movie" ? item.title : item.name;
-                var date = item.release_date || item.first_air_date || "";
-                var year = date.split("-")[0] || "";
-                var img = item.poster_path ? self.imageBase + item.poster_path : "";
-                
-                // Create a synthetic URL to pass the TMDB ID and type to get_sources
-                var syntheticUrl = self.baseUrl + "/" + item.media_type + "/" + item.id;
-
-                results.push({
-                    title: title,
-                    url: syntheticUrl,
-                    img: img,
-                    year: year
-                });
-            });
-            return results;
-        })
-        .catch(function(err) {
-            // ALWAYS resolve with an array, even on error, to prevent hanging.
-            console.error("Cineby Search Error:", err);
-            return [];
-        });
+    }
 };
 
-/**
- * Get sources for a movie or a list of episodes for a TV show.
- * The 'url' parameter is the synthetic URL created in the search function.
- */
-Cineby.prototype.get_sources = function(url) {
-    var self = this;
-    return new Promise(function(resolve) {
-        // 1. Parse the synthetic URL to get TMDB type and ID
-        var match = url.match(/\/(movie|tv)\/(\d+)/);
-        if (!match) {
-            return resolve([]);
-        }
-        var type = match[1];
-        var tmdbId = match[2];
-
-        // 2. Fetch TMDB details to get the official title
-        var detailsUrl = "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + self.tmdbKey;
-        fetch(detailsUrl)
-            .then(function(res) {
-                return res.json();
-            })
-            .then(function(details) {
-                var title = (type === "movie" ? details.title : details.name) || "";
-                // 3. Search for the title on cineby.app
-                return fetch(self.cinebySearchPath + encodeURIComponent(title), { headers: self.headers });
-            })
-            .then(function(res) {
-                return res.text();
-            })
-            .then(function(html) {
-                // 4. Find the first search result link on the Cineby page
-                var linkMatch = html.match(/<a\s+href="([^"]+)"[^>]*class="group flex flex-col/);
-                if (!linkMatch) {
-                    throw new Error("No content link found on Cineby");
-                }
-                var contentUrl = linkMatch[1];
-                var fullContentUrl = contentUrl.startsWith("http") ? contentUrl : self.baseUrl + contentUrl;
-                // 5. Fetch the actual content page
-                return fetch(fullContentUrl, { headers: self.headers });
-            })
-            .then(function(res) {
-                return res.text();
-            })
-            .then(function(contentHtml) {
-                // 6. Check if it's a TV show page or a movie page
-                var isTvShow = /role="tablist"/.test(contentHtml) && /Season/.test(contentHtml);
-                if (isTvShow) {
-                    // It's a TV show, so extract the episode list
-                    resolve(self._extract_tv_sources(contentHtml));
-                } else {
-                    // It's a movie, so extract the video streams directly
-                    resolve(self._extract_movie_sources(contentHtml));
-                }
-            })
-            .catch(function(err) {
-                console.error("Cineby Get Sources Error:", err);
-                resolve([]);
-            });
-    });
-};
+// --- Helper Functions ---
 
 /**
- * Gets the actual video streams for a single episode page.
+ * Extracts iframe and direct file sources from HTML content.
+ * @param {string} html The HTML content of the page.
+ * @returns {Array} An array of source objects.
  */
-Cineby.prototype.get_episode_sources = function(url) {
-    var self = this;
-    return new Promise(function(resolve) {
-        fetch(url, { headers: self.headers })
-            .then(function(res) { return res.text(); })
-            .then(function(html) {
-                // An episode page is structured like a movie page, so we can reuse the same extractor
-                resolve(self._extract_movie_sources(html));
-            })
-            .catch(function(err) {
-                console.error("Cineby Get Episode Sources Error:", err);
-                resolve([]);
-            });
-    });
-};
-
-// --- Internal Helper Functions ---
-
-Cineby.prototype._extract_movie_sources = function(html) {
+function _extractSources(html) {
     var sources = [];
-    var self = this;
-    // Find iframe players
     var iframeRe = /<iframe.*?src="([^"]+)"/g;
+    var fileRe = /file:\s*"([^"]+)"/g;
     var match;
+
+    // Extract iframe sources
     while ((match = iframeRe.exec(html)) !== null) {
         var src = match[1];
         if (!src.startsWith("http")) {
-            src = src.startsWith("//") ? "https:" + src : self.baseUrl + src;
+            src = src.startsWith("//") ? "https:" + src : CINEBY_CONFIG.baseUrl + src;
         }
-        sources.push({ url: src, type: "iframe", title: "Default Player" });
+        sources.push({ url: src, type: "iframe", title: "Iframe Player" });
     }
-    // Find direct file URLs from scripts
-    var fileRe = /file:\s*"([^"]+)"/g;
+
+    // Extract direct file URLs
     var count = 1;
     while ((match = fileRe.exec(html)) !== null) {
-        sources.push({ url: match[1], type: "direct", title: "Source " + (count++) });
+        sources.push({ url: match[1], type: "direct", title: "Direct Source " + (count++) });
     }
     return sources;
-};
+}
 
-Cineby.prototype._extract_tv_sources = function(html) {
+/**
+ * Extracts episode links from a TV show's page content.
+ * @param {string} html The HTML content of the page.
+ * @returns {Array} An array of episode objects.
+ */
+function _extractTvEpisodes(html) {
     var sources = [];
-    var self = this;
-    // Find the active season number
     var seasonMatch = html.match(/<button[^>]*class="[^"]*bg-gray-700[^"]*"[^>]*>Season\s+(\d+)<\/button>/);
     var season = seasonMatch ? seasonMatch[1] : "1";
-    // Find all episode links for that season
     var epRe = /<a\s+href="([^"]+)"[^>]*>.*?<span[^>]*>Episode\s+(\d+)[^<]*<\/span>/g;
     var match;
     while ((match = epRe.exec(html)) !== null) {
         var epUrl = match[1];
         var epNum = match[2];
-        var fullUrl = epUrl.startsWith("http") ? epUrl : self.baseUrl + epUrl;
+        var fullUrl = epUrl.startsWith("http") ? epUrl : CINEBY_CONFIG.baseUrl + epUrl;
         sources.push({
             url: fullUrl,
             title: "Season " + season + " Episode " + epNum,
@@ -180,9 +65,122 @@ Cineby.prototype._extract_tv_sources = function(html) {
         });
     }
     return sources;
+}
+
+
+// --- Main Module Functions ---
+
+/**
+ * Search for movies or TV shows using the TMDB API.
+ * @param {string} query The search query.
+ * @param {string} type The content type ('movie' or 'tv').
+ * @returns {Promise<Array>} A promise that resolves to an array of search results.
+ */
+async function search(query, type) {
+    try {
+        console.log("CINEBY_LOG: search called with query:", query, "type:", type);
+        var searchUrl = CINEBY_CONFIG.searchUrl + "?api_key=" + CINEBY_CONFIG.tmdbKey + "&query=" + encodeURIComponent(query);
+        var response = await fetch(searchUrl);
+        var json = await response.json();
+        
+        var results = [];
+        if (json.results) {
+            for (var i = 0; i < json.results.length; i++) {
+                var item = json.results[i];
+                if (item.media_type === type) {
+                    var title = type === "movie" ? item.title : item.name;
+                    var date = item.release_date || item.first_air_date || "";
+                    var year = date.split("-")[0] || "";
+                    var img = item.poster_path ? CINEBY_CONFIG.imageBase + item.poster_path : "";
+                    var syntheticUrl = CINEBY_CONFIG.baseUrl + "/" + item.media_type + "/" + item.id;
+                    
+                    results.push({
+                        title: title,
+                        url: syntheticUrl,
+                        img: img,
+                        year: year
+                    });
+                }
+            }
+        }
+        console.log("CINEBY_LOG: search finished, found results:", results.length);
+        return results;
+    } catch (err) {
+        console.error("CINEBY_LOG: Search Error ->", err);
+        return []; // IMPORTANT: Always return an array, even on failure.
+    }
+}
+
+/**
+ * Get sources for a movie or a list of episodes for a TV show.
+ * @param {string} url The synthetic URL from the search results.
+ * @returns {Promise<Array>} A promise that resolves to an array of sources or episodes.
+ */
+async function get_sources(url) {
+    try {
+        console.log("CINEBY_LOG: get_sources called with url:", url);
+        var match = url.match(/\/(movie|tv)\/(\d+)/);
+        if (!match) return [];
+
+        var type = match[1];
+        var tmdbId = match[2];
+
+        // 1. Get official title from TMDB
+        var detailsUrl = CINEBY_CONFIG.detailsUrl + "/" + type + "/" + tmdbId + "?api_key=" + CINEBY_CONFIG.tmdbKey;
+        var detailsRes = await fetch(detailsUrl);
+        var detailsJson = await detailsRes.json();
+        var title = (type === "movie" ? detailsJson.title : detailsJson.name) || "";
+
+        // 2. Search Cineby with the official title
+        var cinebySearchUrl = CINEBY_CONFIG.baseUrl + "/search/?q=" + encodeURIComponent(title);
+        var cinebySearchRes = await fetch(cinebySearchUrl, { headers: CINEBY_CONFIG.headers });
+        var cinebyHtml = await cinebySearchRes.text();
+
+        // 3. Find the first result link on Cineby
+        var linkMatch = cinebyHtml.match(/<a\s+href="([^"]+)"[^>]*class="group flex flex-col/);
+        if (!linkMatch) return [];
+        var contentUrl = linkMatch[1];
+        var fullContentUrl = contentUrl.startsWith("http") ? contentUrl : CINEBY_CONFIG.baseUrl + contentUrl;
+        
+        // 4. Fetch the content page
+        var contentRes = await fetch(fullContentUrl, { headers: CINEBY_CONFIG.headers });
+        var contentHtml = await contentRes.text();
+
+        // 5. Determine if movie or TV and extract accordingly
+        if (type === "tv") {
+            return _extractTvEpisodes(contentHtml);
+        } else {
+            return _extractSources(contentHtml);
+        }
+    } catch (err) {
+        console.error("CINEBY_LOG: Get Sources Error ->", err);
+        return []; // IMPORTANT: Always return an array.
+    }
+}
+
+/**
+ * Gets the actual video streams for a single episode page.
+ * @param {string} url The URL of the episode page.
+ * @returns {Promise<Array>} A promise that resolves to an array of video sources.
+ */
+async function get_episode_sources(url) {
+    try {
+        console.log("CINEBY_LOG: get_episode_sources called with url:", url);
+        var response = await fetch(url, { headers: CINEBY_CONFIG.headers });
+        var html = await response.text();
+        return _extractSources(html);
+    } catch (err) {
+        console.error("CINEBY_LOG: Get Episode Sources Error ->", err);
+        return []; // IMPORTANT: Always return an array.
+    }
+}
+
+
+// --- Create the module object for Sora ---
+// This is the only part that should be exposed globally.
+// There is no `export` statement.
+var module = {
+    search: search,
+    get_sources: get_sources,
+    get_episode_sources: get_episode_sources
 };
-
-
-// Finally, instantiate the module so Sora can use it.
-// This must be the last line, with no 'export'.
-var module = new Cineby();
