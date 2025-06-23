@@ -1,8 +1,9 @@
 {
     "sourceName": "Cineby",
-    "version": "1.2.0",
+    "version": "1.4.0",
     "language": "English",
     "iconUrl": "https://www.cineby.app/favicon.ico",
+    "scriptUrl": "https://raw.githubusercontent.com/trumlxrd/SoraModule-Cineby/cineby.js",
     "type": "shows/movies",
     "author": {
         "name": "trumy"
