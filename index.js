@@ -1,4 +1,5 @@
-function cineby() {
+// Define the module constructor
+function Cineby() {
   this.name = "Cineby";
   this.baseUrl = "https://www.cineby.app";
   this.search_url = this.baseUrl + "/search/";
@@ -13,8 +14,8 @@ function cineby() {
   };
 }
 
-// Search function - takes query and type
-cineby.prototype.search = function(query, type) {
+// Search function
+Cineby.prototype.search = function(query, type) {
   var self = this;
   return new Promise(function(resolve, reject) {
     console.log("Searching for " + query + ", type: " + type);
@@ -25,9 +26,6 @@ cineby.prototype.search = function(query, type) {
     
     fetch(tmdbUrl)
       .then(function(response) {
-        if (!response.ok) {
-          throw new Error("TMDB search failed: " + response.status);
-        }
         return response.json();
       })
       .then(function(data) {
@@ -88,7 +86,7 @@ cineby.prototype.search = function(query, type) {
 };
 
 // Get sources for a URL
-cineby.prototype.get_sources = function(url) {
+Cineby.prototype.get_sources = function(url) {
   var self = this;
   return new Promise(function(resolve, reject) {
     console.log("Getting sources for: " + url);
@@ -104,31 +102,22 @@ cineby.prototype.get_sources = function(url) {
       return;
     }
     
-    console.log("Extracted type: " + type + ", tmdbId: " + tmdbId);
-    
     // Get TMDB details
     var tmdbUrl = "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + self.tmdb_api_key;
     
     fetch(tmdbUrl)
       .then(function(response) {
-        if (!response.ok) {
-          throw new Error("TMDB details failed: " + response.status);
-        }
         return response.json();
       })
       .then(function(tmdbData) {
         // Get title based on content type
         var title = type === "movie" ? (tmdbData.title || "") : (tmdbData.name || "");
-        console.log("Looking for content: " + title);
         
         // Search on Cineby for this title
         var searchUrl = self.search_url + "?q=" + encodeURIComponent(title);
         
         return fetch(searchUrl, { headers: self.headers })
           .then(function(searchResponse) {
-            if (!searchResponse.ok) {
-              throw new Error("Cineby search failed: " + searchResponse.status);
-            }
             return searchResponse.text();
           })
           .then(function(html) {
@@ -155,18 +144,13 @@ cineby.prototype.get_sources = function(url) {
             
             // Get full URL
             var fullContentUrl = contentUrl;
-            if (!contentUrl.startsWith("http")) {
+            if (contentUrl.indexOf("http") !== 0) {
               fullContentUrl = self.baseUrl + contentUrl;
             }
-            
-            console.log("Found content URL: " + fullContentUrl);
             
             // Get content page
             return fetch(fullContentUrl, { headers: self.headers })
               .then(function(contentResponse) {
-                if (!contentResponse.ok) {
-                  throw new Error("Content page fetch failed: " + contentResponse.status);
-                }
                 return contentResponse.text();
               })
               .then(function(contentHtml) {
@@ -177,10 +161,8 @@ cineby.prototype.get_sources = function(url) {
                 var sources = [];
                 
                 if (isTvShow) {
-                  console.log("Detected TV show");
                   sources = self._extract_tv_sources(contentHtml, fullContentUrl);
                 } else {
-                  console.log("Detected movie");
                   sources = self._extract_movie_sources(contentHtml, fullContentUrl);
                 }
                 
@@ -196,7 +178,7 @@ cineby.prototype.get_sources = function(url) {
 };
 
 // Extract movie sources
-cineby.prototype._extract_movie_sources = function(html, url) {
+Cineby.prototype._extract_movie_sources = function(html, url) {
   var sources = [];
   var self = this;
   
@@ -206,15 +188,14 @@ cineby.prototype._extract_movie_sources = function(html, url) {
   
   while ((match = iframePattern.exec(html)) !== null) {
     var iframe_src = match[1];
-    if (!iframe_src.startsWith('http')) {
-      if (iframe_src.startsWith('//')) {
+    if (iframe_src.indexOf("http") !== 0) {
+      if (iframe_src.indexOf("//") === 0) {
         iframe_src = 'https:' + iframe_src;
       } else {
         iframe_src = self.baseUrl + iframe_src;
       }
     }
     
-    console.log("Found iframe source: " + iframe_src);
     sources.push({
       url: iframe_src,
       title: 'Player Source',
@@ -227,7 +208,6 @@ cineby.prototype._extract_movie_sources = function(html, url) {
   var i = 1;
   
   while ((match = videoPattern.exec(html)) !== null) {
-    console.log("Found direct source: " + match[1]);
     sources.push({
       url: match[1],
       title: "Source " + i++,
@@ -239,7 +219,7 @@ cineby.prototype._extract_movie_sources = function(html, url) {
 };
 
 // Extract TV sources
-cineby.prototype._extract_tv_sources = function(html, url) {
+Cineby.prototype._extract_tv_sources = function(html, url) {
   var sources = [];
   var self = this;
   
@@ -260,7 +240,7 @@ cineby.prototype._extract_tv_sources = function(html, url) {
       var episodeNum = match[2];
       
       var fullUrl = episodeUrl;
-      if (!episodeUrl.startsWith('http')) {
+      if (episodeUrl.indexOf("http") !== 0) {
         fullUrl = self.baseUrl + episodeUrl;
       }
       
@@ -271,27 +251,6 @@ cineby.prototype._extract_tv_sources = function(html, url) {
       });
     }
     
-    // If no episodes found, try alternative pattern
-    if (sources.length === 0) {
-      var altEpisodePattern = /<a\s+href="([^"]+)"[^>]*>.*?Episode\s+(\d+).*?<\/a>/g;
-      
-      while ((match = altEpisodePattern.exec(html)) !== null) {
-        var episodeUrl = match[1];
-        var episodeNum = match[2];
-        
-        var fullUrl = episodeUrl;
-        if (!episodeUrl.startsWith('http')) {
-          fullUrl = self.baseUrl + episodeUrl;
-        }
-        
-        sources.push({
-          url: fullUrl,
-          title: "Season " + season + " Episode " + episodeNum,
-          type: 'episode'
-        });
-      }
-    }
-    
     return sources;
   } catch (error) {
     console.error("Error extracting TV sources:", error);
@@ -300,14 +259,11 @@ cineby.prototype._extract_tv_sources = function(html, url) {
 };
 
 // Get episode sources
-cineby.prototype.get_episode_sources = function(url) {
+Cineby.prototype.get_episode_sources = function(url) {
   var self = this;
   return new Promise(function(resolve, reject) {
     fetch(url, { headers: self.headers })
       .then(function(response) {
-        if (!response.ok) {
-          throw new Error("HTTP error: " + response.status);
-        }
         return response.text();
       })
       .then(function(html) {
@@ -321,6 +277,20 @@ cineby.prototype.get_episode_sources = function(url) {
   });
 };
 
-// Export the module
-var module = new cineby();
+// Create the module instance
+var module = new Cineby();
+
+// Make it globally available - Sora might expect this
+if (typeof global !== 'undefined') {
+  global.module = module;
+}
+
+// Module exports for different module systems
+if (typeof module !== 'undefined') {
+  module.exports = module;
+} else if (typeof window !== 'undefined') {
+  window.module = module;
+}
+
+// Export for ES modules
 export default module;
