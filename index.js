@@ -161,6 +161,6 @@ Cineby.prototype.get_episode_sources = function(url) {
     });
 };
 
-// 3. Instantiate the module and assign it to a 'module' variable
-//    This is the critical part that the other modules use.
+// This is the critical part that the other working modules use.
+// It must be the very last line, and it must not have 'export default'.
 var module = new Cineby();
