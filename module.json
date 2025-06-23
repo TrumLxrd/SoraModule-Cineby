@@ -11,7 +11,7 @@
     "streamType": "HLS",
     "quality": "1080p",
     "baseUrl": "https://www.cineby.app/",
-    "searchBaseUrl": "https://www.cineby.app/search/?q=%s",
+    "searchBaseUrl": "https://api.themoviedb.org/3/search/multi?api_key=d9956abacedb5b43a16cc4864b26d451&query=%s",
     "scriptUrl": "https://raw.githubusercontent.com/yourusername/your-repo/main/cineby/index.js",
     "type": "shows/movies",
     "asyncJS": true,
