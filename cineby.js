@@ -1,186 +1,276 @@
-// Filename: cineby.js
+// Cineby.app Sora Module - Regex Only Version
+// Version: 1.0.0
 
-// --- Configuration ---
-var CINEBY_CONFIG = {
-    name: "Cineby",
-    baseUrl: "https://www.cineby.app",
-    tmdbKey: "d9956abacedb5b43a16cc4864b26d451",
-    searchUrl: "https://api.themoviedb.org/3/search/multi",
-    detailsUrl: "https://api.themoviedb.org/3",
-    imageBase: "https://image.tmdb.org/t/p/w500",
-    headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-};
-
-// --- Helper Functions ---
-
-/**
- * Extracts iframe and direct file sources from HTML content.
- * @param {string} html The HTML content of the page.
- * @returns {Array} An array of source objects.
- */
-function _extractSources(html) {
-    var sources = [];
-    var iframeRe = /<iframe.*?src="([^"]+)"/g;
-    var fileRe = /file:\s*"([^"]+)"/g;
-    var match;
-
-    // Extract iframe sources
-    while ((match = iframeRe.exec(html)) !== null) {
-        var src = match[1];
-        if (!src.startsWith("http")) {
-            src = src.startsWith("//") ? "https:" + src : CINEBY_CONFIG.baseUrl + src;
-        }
-        sources.push({ url: src, type: "iframe", title: "Iframe Player" });
-    }
-
-    // Extract direct file URLs
-    var count = 1;
-    while ((match = fileRe.exec(html)) !== null) {
-        sources.push({ url: match[1], type: "direct", title: "Direct Source " + (count++) });
-    }
-    return sources;
+// Utility function to clean titles using regex
+function cleanTitle(title) {
+    if (!title) return '';
+    return title
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec))
+        .replace(/<[^>]*>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
-/**
- * Extracts episode links from a TV show's page content.
- * @param {string} html The HTML content of the page.
- * @returns {Array} An array of episode objects.
- */
-function _extractTvEpisodes(html) {
-    var sources = [];
-    var seasonMatch = html.match(/<button[^>]*class="[^"]*bg-gray-700[^"]*"[^>]*>Season\s+(\d+)<\/button>/);
-    var season = seasonMatch ? seasonMatch[1] : "1";
-    var epRe = /<a\s+href="([^"]+)"[^>]*>.*?<span[^>]*>Episode\s+(\d+)[^<]*<\/span>/g;
-    var match;
-    while ((match = epRe.exec(html)) !== null) {
-        var epUrl = match[1];
-        var epNum = match[2];
-        var fullUrl = epUrl.startsWith("http") ? epUrl : CINEBY_CONFIG.baseUrl + epUrl;
-        sources.push({
-            url: fullUrl,
-            title: "Season " + season + " Episode " + epNum,
-            type: "episode"
-        });
-    }
-    return sources;
+// Utility function to convert relative URLs to absolute using regex
+function makeAbsoluteUrl(url, baseUrl) {
+    if (!url) return '';
+    if (/^https?:\/\//.test(url)) return url;
+    if (/^\/\//.test(url)) return 'https:' + url;
+    if (/^\//.test(url)) return baseUrl + url;
+    return baseUrl + '/' + url;
 }
 
-
-// --- Main Module Functions ---
-
-/**
- * Search for movies or TV shows using the TMDB API.
- * @param {string} query The search query.
- * @param {string} type The content type ('movie' or 'tv').
- * @returns {Promise<Array>} A promise that resolves to an array of search results.
- */
-async function search(query, type) {
-    try {
-        console.log("CINEBY_LOG: search called with query:", query, "type:", type);
-        var searchUrl = CINEBY_CONFIG.searchUrl + "?api_key=" + CINEBY_CONFIG.tmdbKey + "&query=" + encodeURIComponent(query);
-        var response = await fetch(searchUrl);
-        var json = await response.json();
+// Search for movies and TV shows using regex only
+function searchResults(html) {
+    const results = [];
+    
+    // Regex patterns for finding movie/show containers
+    const containerPatterns = [
+        /<div[^>]*class="[^"]*(?:movie|film|show|card|item)[^"]*"[^>]*>.*?<\/div>/gis,
+        /<article[^>]*class="[^"]*(?:movie|film|show|card|item)[^"]*"[^>]*>.*?<\/article>/gis,
+        /<li[^>]*class="[^"]*(?:movie|film|show|card|item)[^"]*"[^>]*>.*?<\/li>/gis,
+        /<div[^>]*class="[^"]*(?:col|grid|flex)[^"]*"[^>]*>.*?<a[^>]*href="[^"]*"[^>]*>.*?<\/a>.*?<\/div>/gis
+    ];
+    
+    for (const pattern of containerPatterns) {
+        const matches = html.match(pattern) || [];
         
-        var results = [];
-        if (json.results) {
-            for (var i = 0; i < json.results.length; i++) {
-                var item = json.results[i];
-                if (item.media_type === type) {
-                    var title = type === "movie" ? item.title : item.name;
-                    var date = item.release_date || item.first_air_date || "";
-                    var year = date.split("-")[0] || "";
-                    var img = item.poster_path ? CINEBY_CONFIG.imageBase + item.poster_path : "";
-                    var syntheticUrl = CINEBY_CONFIG.baseUrl + "/" + item.media_type + "/" + item.id;
-                    
-                    results.push({
-                        title: title,
-                        url: syntheticUrl,
-                        img: img,
-                        year: year
-                    });
+        for (const match of matches) {
+            // Extract title using regex
+            const titleRegex = /<(?:h[1-6]|div|span|p|a)[^>]*(?:class="[^"]*(?:title|name)[^"]*"|title="[^"]*")[^>]*>(.*?)<\/(?:h[1-6]|div|span|p|a)>/i;
+            const titleMatch = match.match(titleRegex) || match.match(/<a[^>]*title="([^"]*)"[^>]*>/i) || match.match(/<img[^>]*alt="([^"]*)"[^>]*>/i);
+            
+            // Extract href using regex
+            const hrefRegex = /<a[^>]*href="([^"]*)"[^>]*>/i;
+            const hrefMatch = match.match(hrefRegex);
+            
+            // Extract image using regex
+            const imgRegex = /<img[^>]*src="([^"]*)"[^>]*>/i;
+            const imgMatch = match.match(imgRegex);
+            
+            if (titleMatch && hrefMatch) {
+                const title = cleanTitle(titleMatch[1]);
+                const href = makeAbsoluteUrl(hrefMatch[1], 'https://www.cineby.app');
+                const image = imgMatch ? makeAbsoluteUrl(imgMatch[1], 'https://www.cineby.app') : '';
+                
+                if (title && href && !results.some(r => r.href === href)) {
+                    results.push({ title, image, href });
                 }
             }
         }
-        console.log("CINEBY_LOG: search finished, found results:", results.length);
-        return results;
-    } catch (err) {
-        console.error("CINEBY_LOG: Search Error ->", err);
-        return []; // IMPORTANT: Always return an array, even on failure.
-    }
-}
-
-/**
- * Get sources for a movie or a list of episodes for a TV show.
- * @param {string} url The synthetic URL from the search results.
- * @returns {Promise<Array>} A promise that resolves to an array of sources or episodes.
- */
-async function get_sources(url) {
-    try {
-        console.log("CINEBY_LOG: get_sources called with url:", url);
-        var match = url.match(/\/(movie|tv)\/(\d+)/);
-        if (!match) return [];
-
-        var type = match[1];
-        var tmdbId = match[2];
-
-        // 1. Get official title from TMDB
-        var detailsUrl = CINEBY_CONFIG.detailsUrl + "/" + type + "/" + tmdbId + "?api_key=" + CINEBY_CONFIG.tmdbKey;
-        var detailsRes = await fetch(detailsUrl);
-        var detailsJson = await detailsRes.json();
-        var title = (type === "movie" ? detailsJson.title : detailsJson.name) || "";
-
-        // 2. Search Cineby with the official title
-        var cinebySearchUrl = CINEBY_CONFIG.baseUrl + "/search/?q=" + encodeURIComponent(title);
-        var cinebySearchRes = await fetch(cinebySearchUrl, { headers: CINEBY_CONFIG.headers });
-        var cinebyHtml = await cinebySearchRes.text();
-
-        // 3. Find the first result link on Cineby
-        var linkMatch = cinebyHtml.match(/<a\s+href="([^"]+)"[^>]*class="group flex flex-col/);
-        if (!linkMatch) return [];
-        var contentUrl = linkMatch[1];
-        var fullContentUrl = contentUrl.startsWith("http") ? contentUrl : CINEBY_CONFIG.baseUrl + contentUrl;
         
-        // 4. Fetch the content page
-        var contentRes = await fetch(fullContentUrl, { headers: CINEBY_CONFIG.headers });
-        var contentHtml = await contentRes.text();
-
-        // 5. Determine if movie or TV and extract accordingly
-        if (type === "tv") {
-            return _extractTvEpisodes(contentHtml);
-        } else {
-            return _extractSources(contentHtml);
+        if (results.length > 0) break;
+    }
+    
+    // Fallback: Extract from JSON-LD using regex
+    if (results.length === 0) {
+        const jsonLdRegex = /<script[^>]*type="application\/ld\+json"[^>]*>(.*?)<\/script>/gis;
+        const jsonMatches = html.match(jsonLdRegex) || [];
+        
+        for (const jsonMatch of jsonMatches) {
+            const jsonContent = jsonMatch.replace(/<script[^>]*>/i, '').replace(/<\/script>/i, '');
+            
+            // Extract movie/show data using regex
+            const nameRegex = /"name"\s*:\s*"([^"]*)"/i;
+            const urlRegex = /"url"\s*:\s*"([^"]*)"/i;
+            const imageRegex = /"image"\s*:\s*"([^"]*)"/i;
+            const typeRegex = /"@type"\s*:\s*"(Movie|TVSeries)"/i;
+            
+            const nameMatch = jsonContent.match(nameRegex);
+            const urlMatch = jsonContent.match(urlRegex);
+            const imageMatch = jsonContent.match(imageRegex);
+            const typeMatch = jsonContent.match(typeRegex);
+            
+            if (nameMatch && urlMatch && typeMatch) {
+                results.push({
+                    title: cleanTitle(nameMatch[1]),
+                    image: imageMatch ? makeAbsoluteUrl(imageMatch[1], 'https://www.cineby.app') : '',
+                    href: makeAbsoluteUrl(urlMatch[1], 'https://www.cineby.app')
+                });
+            }
         }
-    } catch (err) {
-        console.error("CINEBY_LOG: Get Sources Error ->", err);
-        return []; // IMPORTANT: Always return an array.
     }
+    
+    return results;
 }
 
-/**
- * Gets the actual video streams for a single episode page.
- * @param {string} url The URL of the episode page.
- * @returns {Promise<Array>} A promise that resolves to an array of video sources.
- */
-async function get_episode_sources(url) {
-    try {
-        console.log("CINEBY_LOG: get_episode_sources called with url:", url);
-        var response = await fetch(url, { headers: CINEBY_CONFIG.headers });
-        var html = await response.text();
-        return _extractSources(html);
-    } catch (err) {
-        console.error("CINEBY_LOG: Get Episode Sources Error ->", err);
-        return []; // IMPORTANT: Always return an array.
+// Extract details from movie/show page using regex only
+function extractDetails(html) {
+    const details = {};
+    
+    // Extract description using regex
+    const descPatterns = [
+        /<meta[^>]*name="description"[^>]*content="([^"]*)"[^>]*>/i,
+        /<(?:div|p|span)[^>]*class="[^"]*(?:description|summary|plot|overview)[^"]*"[^>]*>(.*?)<\/(?:div|p|span)>/is,
+        /<(?:div|p)[^>]*id="[^"]*(?:description|summary|plot)[^"]*"[^>]*>(.*?)<\/(?:div|p)>/is
+    ];
+    
+    for (const pattern of descPatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+            details.description = cleanTitle(match[1]);
+            break;
+        }
     }
+    
+    // Extract alternative title using regex
+    const altTitlePatterns = [
+        /<(?:div|span|p)[^>]*class="[^"]*(?:alt-title|original-title|subtitle)[^"]*"[^>]*>(.*?)<\/(?:div|span|p)>/i,
+        /<meta[^>]*property="og:title:alt"[^>]*content="([^"]*)"[^>]*>/i
+    ];
+    
+    for (const pattern of altTitlePatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+            details.altTitle = cleanTitle(match[1]);
+            break;
+        }
+    }
+    
+    // Extract year using regex
+    const yearPatterns = [
+        /<(?:div|span)[^>]*class="[^"]*(?:year|date|release)[^"]*"[^>]*>.*?(\d{4}).*?<\/(?:div|span)>/i,
+        /<meta[^>]*property="video:release_date"[^>]*content="(\d{4})[^"]*"[^>]*>/i,
+        /(?:year|release|date)[^>]*>.*?(\d{4})/i
+    ];
+    
+    for (const pattern of yearPatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+            details.year = match[1];
+            break;
+        }
+    }
+    
+    // Extract rating using regex
+    const ratingRegex = /<(?:div|span)[^>]*class="[^"]*(?:rating|score)[^"]*"[^>]*>.*?(\d+(?:\.\d+)?).*?<\/(?:div|span)>/i;
+    const ratingMatch = html.match(ratingRegex);
+    if (ratingMatch) {
+        details.rating = ratingMatch[1];
+    }
+    
+    return details;
 }
 
+// Extract episode links for TV shows using regex only
+function extractEpisodes(html) {
+    const episodes = [];
+    
+    // Regex patterns for episode links
+    const episodePatterns = [
+        /<a[^>]*href="([^"]*)"[^>]*>.*?(?:episode|ep)[\s\-]*(\d+).*?<\/a>/gi,
+        /<(?:div|li)[^>]*class="[^"]*episode[^"]*"[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>.*?(\d+).*?<\/a>.*?<\/(?:div|li)>/gi,
+        /<a[^>]*href="([^"]*)"[^>]*class="[^"]*episode[^"]*"[^>]*>.*?(\d+).*?<\/a>/gi
+    ];
+    
+    for (const pattern of episodePatterns) {
+        let match;
+        while ((match = pattern.exec(html)) !== null) {
+            const url = makeAbsoluteUrl(match[1], 'https://www.cineby.app');
+            const episodeNum = parseInt(match[2]);
+            
+            if (url && episodeNum && !episodes.some(ep => ep.episode === episodeNum)) {
+                episodes.push({
+                    episode: episodeNum,
+                    href: url
+                });
+            }
+        }
+    }
+    
+    // Fallback: numbered links using regex
+    if (episodes.length === 0) {
+        const numberedLinkRegex = /<a[^>]*href="([^"]*)"[^>]*>.*?(\d+).*?<\/a>/gi;
+        let match;
+        let episodeCounter = 1;
+        
+        while ((match = numberedLinkRegex.exec(html)) !== null) {
+            const url = makeAbsoluteUrl(match[1], 'https://www.cineby.app');
+            const number = parseInt(match[2]);
+            
+            if (url && number && /(?:watch|play|episode|ep)/i.test(match[0])) {
+                episodes.push({
+                    episode: number || episodeCounter++,
+                    href: url
+                });
+            }
+        }
+    }
+    
+    return episodes.sort((a, b) => a.episode - b.episode);
+}
 
-// --- Create the module object for Sora ---
-// This is the only part that should be exposed globally.
-// There is no `export` statement.
-var module = {
-    search: search,
-    get_sources: get_sources,
-    get_episode_sources: get_episode_sources
-};
+// Extract stream URL from video page using regex only
+function extractStreamUrl(html) {
+    // Direct video source patterns using regex
+    const videoPatterns = [
+        /<video[^>]*>.*?<source[^>]*src="([^"]*\.(?:mp4|m3u8|webm))"[^>]*>/is,
+        /<video[^>]*src="([^"]*\.(?:mp4|m3u8|webm))"[^>]*>/i,
+        /(?:file|source|src)\s*:\s*["']([^"']*\.(?:mp4|m3u8|webm))[^"']*/i,
+        /["'](?:file|source|src)["']\s*:\s*["']([^"']*\.(?:mp4|m3u8|webm))[^"']*/i,
+        /video_url\s*[:=]\s*["']([^"']*)[^"']*/i,
+        /stream_url\s*[:=]\s*["']([^"']*)[^"']*/i
+    ];
+    
+    for (const pattern of videoPatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+            const url = makeAbsoluteUrl(match[1], 'https://www.cineby.app');
+            if (/\.(?:mp4|m3u8|webm)(?:\?|$)/i.test(url)) {
+                return url;
+            }
+        }
+    }
+    
+    // Iframe source using regex
+    const iframeRegex = /<iframe[^>]*src="([^"]*)"[^>]*>/i;
+    const iframeMatch = html.match(iframeRegex);
+    if (iframeMatch) {
+        return makeAbsoluteUrl(iframeMatch[1], 'https://www.cineby.app');
+    }
+    
+    // Data attributes using regex
+    const dataPatterns = [
+        /data-(?:src|url|stream|file)="([^"]*)"[^>]*>/i,
+        /data-video-src="([^"]*)"[^>]*>/i,
+        /data-player-url="([^"]*)"[^>]*>/i
+    ];
+    
+    for (const pattern of dataPatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+            return makeAbsoluteUrl(match[1], 'https://www.cineby.app');
+        }
+    }
+    
+    // JavaScript variable patterns using regex
+    const jsPatterns = [
+        /var\s+(?:video_url|stream_url|file)\s*=\s*["']([^"']*)[^"']*/i,
+        /(?:videoUrl|streamUrl|fileUrl)\s*[:=]\s*["']([^"']*)[^"']*/i,
+        /player\.src\s*=\s*["']([^"']*)[^"']*/i
+    ];
+    
+    for (const pattern of jsPatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+            return makeAbsoluteUrl(match[1], 'https://www.cineby.app');
+        }
+    }
+    
+    return '';
+}
+
+// Export functions for Sora
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        searchResults,
+        extractDetails,
+        extractEpisodes,
+        extractStreamUrl
+    };
+}
