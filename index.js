@@ -2,7 +2,7 @@ class cineby {
     constructor() {
         this.name = "Cineby";
         this.baseUrl = "https://www.cineby.app";
-        this.search_url = `${this.baseUrl}/search/`;
+        this.search_url = this.baseUrl + "/search/";
         this.tmdb_api_key = "d9956abacedb5b43a16cc4864b26d451";
         this.tmdb_image_base = "https://image.tmdb.org/t/p/w500";
         this.headers = {
@@ -10,52 +10,60 @@ class cineby {
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
             "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
+            "Upgrade-Insecure-Requests": "1"
         };
     }
 
     async search(query, type) {
-        console.log(`Searching for ${query}, type: ${type}`);
+        console.log("Searching for " + query + ", type: " + type);
         try {
             // Define the TMDB endpoint based on content type
-            let endpoint = type === "movie" ? "movie" : "tv";
+            var endpoint = type === "movie" ? "movie" : "tv";
             
             // Make request to TMDB
-            const response = await fetch(
-                `https://api.themoviedb.org/3/search/${endpoint}?api_key=${this.tmdb_api_key}&query=${encodeURIComponent(query)}`
+            var response = await fetch(
+                "https://api.themoviedb.org/3/search/" + endpoint + "?api_key=" + this.tmdb_api_key + "&query=" + encodeURIComponent(query)
             );
             
             if (!response.ok) {
-                throw new Error(`TMDB search failed: ${response.status}`);
+                throw new Error("TMDB search failed: " + response.status);
             }
             
-            const data = await response.json();
-            console.log(`TMDB found ${data.results?.length || 0} results`);
+            var data = await response.json();
+            console.log("TMDB found " + (data.results ? data.results.length : 0) + " results");
             
             // Map TMDB results to our format
-            const results = [];
-            for (const item of data.results || []) {
-                // Get basic info from TMDB
-                const title = type === "movie" ? item.title : item.name;
-                const year = item.release_date 
-                    ? item.release_date.split("-")[0] 
-                    : (item.first_air_date ? item.first_air_date.split("-")[0] : "");
-                const poster = item.poster_path 
-                    ? `${this.tmdb_image_base}${item.poster_path}` 
-                    : "";
-                
-                // Build our result object - store TMDB data for later use
-                results.push({
-                    title: title,
-                    year: year,
-                    img: poster,
-                    tmdbId: item.id,
-                    url: `${this.baseUrl}/${type}/${item.id}`, // We'll use this format for simplicity
-                    type: type
-                });
+            var results = [];
+            if (data.results && data.results.length > 0) {
+                for (var i = 0; i < data.results.length; i++) {
+                    var item = data.results[i];
+                    // Get basic info from TMDB
+                    var title = type === "movie" ? item.title : item.name;
+                    var year = "";
+                    if (item.release_date) {
+                        year = item.release_date.split("-")[0];
+                    } else if (item.first_air_date) {
+                        year = item.first_air_date.split("-")[0];
+                    }
+                    
+                    var poster = "";
+                    if (item.poster_path) {
+                        poster = this.tmdb_image_base + item.poster_path;
+                    }
+                    
+                    // Build our result object - store TMDB data for later use
+                    results.push({
+                        title: title,
+                        year: year,
+                        img: poster,
+                        tmdbId: item.id,
+                        url: this.baseUrl + "/" + type + "/" + item.id, // We'll use this format for simplicity
+                        type: type
+                    });
+                }
             }
             
-            console.log(`Returning ${results.length} search results`);
+            console.log("Returning " + results.length + " search results");
             return results;
             
         } catch (error) {
@@ -68,49 +76,49 @@ class cineby {
         console.log("Getting sources for:", url);
         try {
             // Extract TMDB ID from URL
-            const match = url.match(/\/([^\/]+)\/(\d+)$/);
+            var match = url.match(/\/([^\/]+)\/(\d+)$/);
             if (!match) {
                 throw new Error("Invalid URL format");
             }
             
-            const type = match[1];
-            const tmdbId = match[2];
-            console.log(`Extracted type: ${type}, tmdbId: ${tmdbId}`);
+            var type = match[1];
+            var tmdbId = match[2];
+            console.log("Extracted type: " + type + ", tmdbId: " + tmdbId);
             
             // Use TMDB ID to get details
-            const tmdbResponse = await fetch(
-                `https://api.themoviedb.org/3/${type}/${tmdbId}?api_key=${this.tmdb_api_key}`
+            var tmdbResponse = await fetch(
+                "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + this.tmdb_api_key
             );
             
             if (!tmdbResponse.ok) {
-                throw new Error(`TMDB details failed: ${tmdbResponse.status}`);
+                throw new Error("TMDB details failed: " + tmdbResponse.status);
             }
             
-            const tmdbData = await tmdbResponse.json();
+            var tmdbData = await tmdbResponse.json();
             
             // Get title based on content type
-            const title = type === "movie" ? tmdbData.title : tmdbData.name;
-            console.log(`Looking for content: ${title}`);
+            var title = type === "movie" ? tmdbData.title : tmdbData.name;
+            console.log("Looking for content: " + title);
             
             // Search on Cineby for this title
-            const searchUrl = `${this.search_url}?q=${encodeURIComponent(title)}`;
-            const searchResponse = await fetch(searchUrl, { headers: this.headers });
+            var searchUrl = this.search_url + "?q=" + encodeURIComponent(title);
+            var searchResponse = await fetch(searchUrl, { headers: this.headers });
             
             if (!searchResponse.ok) {
-                throw new Error(`Cineby search failed: ${searchResponse.status}`);
+                throw new Error("Cineby search failed: " + searchResponse.status);
             }
             
-            const html = await searchResponse.text();
+            var html = await searchResponse.text();
             
             // Find the first matching result
-            const resultPattern = /<a\s+href="([^"]+)"[^>]*class="group flex flex-col[^>]*>.*?<div[^>]*class="[^"]*text-sm[^"]*font-semibold[^"]*"[^>]*>(.*?)<\/div>/gs;
+            var resultPattern = /<a\s+href="([^"]+)"[^>]*class="group flex flex-col[^>]*>.*?<div[^>]*class="[^"]*text-sm[^"]*font-semibold[^"]*"[^>]*>(.*?)<\/div>/gs;
             
-            let match2, contentUrl;
+            var match2, contentUrl;
             while ((match2 = resultPattern.exec(html)) !== null) {
-                const resultTitle = match2[2].replace(/<.*?>/g, '').trim();
+                var resultTitle = match2[2].replace(/<.*?>/g, '').trim();
                 
                 // Simple title matching - you could make this more sophisticated
-                if (resultTitle.toLowerCase().includes(title.toLowerCase())) {
+                if (resultTitle.toLowerCase().indexOf(title.toLowerCase()) !== -1) {
                     contentUrl = match2[1];
                     break;
                 }
@@ -122,20 +130,20 @@ class cineby {
             }
             
             // Get the full URL to the content
-            const fullContentUrl = contentUrl.startsWith('http') ? contentUrl : this.baseUrl + contentUrl;
+            var fullContentUrl = contentUrl.startsWith('http') ? contentUrl : this.baseUrl + contentUrl;
             console.log("Found content URL:", fullContentUrl);
             
             // Get the content page
-            const contentResponse = await fetch(fullContentUrl, { headers: this.headers });
+            var contentResponse = await fetch(fullContentUrl, { headers: this.headers });
             
             if (!contentResponse.ok) {
-                throw new Error(`Content page fetch failed: ${contentResponse.status}`);
+                throw new Error("Content page fetch failed: " + contentResponse.status);
             }
             
-            const contentHtml = await contentResponse.text();
+            var contentHtml = await contentResponse.text();
             
             // Determine if it's a movie or show
-            const isTvShow = /<div\s+role="tablist".*?>.*?Season/is.test(contentHtml);
+            var isTvShow = /<div\s+role="tablist".*?>.*?Season/is.test(contentHtml);
             
             if (isTvShow) {
                 console.log("Detected TV show");
@@ -152,14 +160,14 @@ class cineby {
     }
     
     _extract_movie_sources(html, url) {
-        const sources = [];
+        var sources = [];
         
         // Find iframe players
-        const iframePattern = /<iframe.*?src="([^"]+)"/g;
-        let match;
+        var iframePattern = /<iframe.*?src="([^"]+)"/g;
+        var match;
         
         while ((match = iframePattern.exec(html)) !== null) {
-            let iframe_src = match[1];
+            var iframe_src = match[1];
             if (!iframe_src.startsWith('http')) {
                 iframe_src = iframe_src.startsWith('//') ? 'https:' + iframe_src : this.baseUrl + iframe_src;
             }
@@ -173,14 +181,14 @@ class cineby {
         }
         
         // Find direct video sources
-        const videoPattern = /file:\s*"(https?:\/\/[^"]+\.(?:mp4|m3u8|mkv))"/g;
-        let i = 1;
+        var videoPattern = /file:\s*"(https?:\/\/[^"]+\.(?:mp4|m3u8|mkv))"/g;
+        var i = 1;
         
         while ((match = videoPattern.exec(html)) !== null) {
             console.log("Found direct source:", match[1]);
             sources.push({
                 url: match[1],
-                title: `Source ${i++}`,
+                title: "Source " + i++,
                 type: 'direct'
             });
         }
@@ -189,25 +197,25 @@ class cineby {
     }
     
     _extract_tv_sources(html, url) {
-        const sources = [];
+        var sources = [];
         
         try {
             // Find active season
-            const seasonMatch = html.match(/<button[^>]*class="[^"]*bg-gray-700[^"]*"[^>]*>Season\s+(\d+)<\/button>/);
-            const season = seasonMatch ? seasonMatch[1] : "1";
+            var seasonMatch = html.match(/<button[^>]*class="[^"]*bg-gray-700[^"]*"[^>]*>Season\s+(\d+)<\/button>/);
+            var season = seasonMatch ? seasonMatch[1] : "1";
             
             // Find episodes
-            const episodePattern = /<a\s+href="([^"]+)"[^>]*>.*?<span[^>]*>Episode\s+(\d+)[^<]*<\/span>/gs;
-            let match;
+            var episodePattern = /<a\s+href="([^"]+)"[^>]*>.*?<span[^>]*>Episode\s+(\d+)[^<]*<\/span>/gs;
+            var match;
             
             while ((match = episodePattern.exec(html)) !== null) {
-                const episodeUrl = match[1];
-                const episodeNum = match[2];
+                var episodeUrl = match[1];
+                var episodeNum = match[2];
                 
-                const fullUrl = episodeUrl.startsWith('http') ? episodeUrl : this.baseUrl + episodeUrl;
+                var fullUrl = episodeUrl.startsWith('http') ? episodeUrl : this.baseUrl + episodeUrl;
                 sources.push({
                     url: fullUrl,
-                    title: `Season ${season} Episode ${episodeNum}`,
+                    title: "Season " + season + " Episode " + episodeNum,
                     type: 'episode'
                 });
             }
@@ -222,12 +230,12 @@ class cineby {
     
     async get_episode_sources(url) {
         try {
-            const response = await fetch(url, { headers: this.headers });
+            var response = await fetch(url, { headers: this.headers });
             if (!response.ok) {
-                throw new Error(`HTTP error: ${response.status}`);
+                throw new Error("HTTP error: " + response.status);
             }
             
-            const html = await response.text();
+            var html = await response.text();
             return this._extract_movie_sources(html, url);
             
         } catch (error) {
@@ -238,5 +246,5 @@ class cineby {
 }
 
 // Define the module for Sora to import
-const module = new cineby();
+var module = new cineby();
 export default module;
