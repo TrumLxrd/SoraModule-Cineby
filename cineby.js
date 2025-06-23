@@ -1,196 +1,143 @@
-// Define the module directly
-var module = {
-  name: "Cineby",
-  baseUrl: "https://www.cineby.app",
-  tmdb_api_key: "d9956abacedb5b43a16cc4864b26d451",
-  tmdb_image_base: "https://image.tmdb.org/t/p/w500",
-  headers: {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-  },
+// ------ cineby.js ------
 
-  // Search function
-  search: function(query, type) {
-    var self = this;
-    
-    return new Promise(function(resolve) {
-      console.log("Searching for " + query + ", type: " + type);
-      
-      // Define the TMDB endpoint based on content type
-      var endpoint = type === "movie" ? "movie" : "tv";
-      var tmdbUrl = "https://api.themoviedb.org/3/search/" + endpoint + "?api_key=" + self.tmdb_api_key + "&query=" + encodeURIComponent(query);
-      
-      fetch(tmdbUrl)
-        .then(function(response) { return response.json(); })
-        .then(function(data) {
-          var results = [];
-          
-          if (data.results) {
-            for (var i = 0; i < data.results.length; i++) {
-              var item = data.results[i];
-              var title = type === "movie" ? (item.title || "") : (item.name || "");
-              var year = "";
-              
-              if (item.release_date) {
-                year = item.release_date.split("-")[0];
-              } else if (item.first_air_date) {
-                year = item.first_air_date.split("-")[0];
-              }
-              
-              results.push({
-                title: title,
-                year: year,
-                img: item.poster_path ? (self.tmdb_image_base + item.poster_path) : "",
-                url: self.baseUrl + "/" + type + "/" + item.id
-              });
-            }
-          }
-          
-          resolve(results);
-        })
-        .catch(function(error) {
-          console.error("Search error:", error);
-          resolve([]);
+function Cineby() {
+  this.name           = "Cineby";
+  this.baseUrl        = "https://www.cineby.app";
+  this.searchBaseUrl  = this.baseUrl + "/search/?q=";
+  this.tmdbApiKey     = "d9956abacedb5b43a16cc4864b26d451";
+  this.tmdbBaseUrl    = "https://api.themoviedb.org/3";
+  this.tmdbImageBase  = "https://image.tmdb.org/t/p/w500";
+  this.headers        = { "User-Agent": navigator.userAgent };
+}
+
+// 1. SEARCH – returns Promise<[ { title, year, img, url, type } ]>
+Cineby.prototype.search = function(query, type) {
+  var self = this;
+  var endpoint = (type === "movie" ? "movie" : "tv");
+  var url = self.tmdbBaseUrl + "/search/" + endpoint
+          + "?api_key=" + self.tmdbApiKey
+          + "&query="  + encodeURIComponent(query);
+
+  return fetch(url)
+    .then(function(r){ return r.json() })
+    .then(function(json){
+      var out = [];
+      if (Array.isArray(json.results)) {
+        json.results.forEach(function(item){
+          var title = (type==="movie"? item.title : item.name) || "";
+          var year  = (item.release_date || item.first_air_date || "").substr(0,4);
+          var img   = item.poster_path
+                    ? self.tmdbImageBase + item.poster_path
+                    : "";
+          // URL format for get_sources
+          var url_  = self.baseUrl + "/" + type + "/" + item.id;
+          out.push({ title: title, year: year, img: img, url: url_, type: type });
         });
-    });
-  },
-
-  // Get sources for a URL
-  get_sources: function(url) {
-    var self = this;
-    
-    return new Promise(function(resolve) {
-      var urlParts = url.split("/");
-      var type = urlParts[urlParts.length - 2];
-      var tmdbId = urlParts[urlParts.length - 1];
-      
-      if (!tmdbId) {
-        resolve([]);
-        return;
       }
-      
-      var tmdbUrl = "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + self.tmdb_api_key;
-      
-      fetch(tmdbUrl)
-        .then(function(response) { return response.json(); })
-        .then(function(data) {
-          var title = type === "movie" ? (data.title || "") : (data.name || "");
-          var searchUrl = self.baseUrl + "/search/?q=" + encodeURIComponent(title);
-          
-          return fetch(searchUrl, { headers: self.headers })
-            .then(function(res) { return res.text(); })
-            .then(function(html) {
-              var resultPattern = /<a\s+href="([^"]+)"[^>]*class="group flex flex-col[^>]*>.*?<div[^>]*>(.*?)<\/div>/g;
-              var match;
-              var contentUrl = null;
-              
-              while ((match = resultPattern.exec(html)) !== null) {
-                contentUrl = match[1];
-                break;
-              }
-              
-              if (!contentUrl) {
-                resolve([]);
-                return;
-              }
-              
-              var fullContentUrl = contentUrl.indexOf("http") === 0 ? contentUrl : self.baseUrl + contentUrl;
-              
-              return fetch(fullContentUrl, { headers: self.headers })
-                .then(function(res) { return res.text(); })
-                .then(function(contentHtml) {
-                  var isTvShow = contentHtml.indexOf("role=\"tablist\"") !== -1;
-                  var sources = [];
-                  
-                  if (isTvShow) {
-                    sources = self._extract_tv_sources(contentHtml);
-                  } else {
-                    sources = self._extract_movie_sources(contentHtml);
-                  }
-                  
-                  resolve(sources);
-                });
-            });
-        })
-        .catch(function(error) {
-          console.error("Error:", error);
-          resolve([]);
-        });
+      return out;
+    })
+    .catch(function(){
+      return [];
     });
-  },
+};
 
-  // Extract movie sources
-  _extract_movie_sources: function(html) {
-    var sources = [];
-    var self = this;
-    
-    var iframePattern = /<iframe.*?src="([^"]+)"/g;
-    var match;
-    
-    while ((match = iframePattern.exec(html)) !== null) {
-      var src = match[1];
-      if (src.indexOf("http") !== 0) {
-        src = src.indexOf("//") === 0 ? "https:" + src : self.baseUrl + src;
-      }
-      
-      sources.push({
-        url: src,
-        title: "Player",
-        type: "iframe"
-      });
-    }
-    
-    var videoPattern = /file:\s*"(https?:\/\/[^"]+\.(?:mp4|m3u8))"/g;
-    var i = 1;
-    
-    while ((match = videoPattern.exec(html)) !== null) {
-      sources.push({
-        url: match[1],
-        title: "Source " + i++,
-        type: "direct"
-      });
-    }
-    
-    return sources;
-  },
+// 2. GET_SOURCES – returns Promise<[ { url, title, type } ]> for a movie or TV show page
+Cineby.prototype.get_sources = function(url) {
+  var self = this;
+  // Extract TMDB type & id from the URL we built in search()
+  var m = url.match(/\/(movie|tv)\/(\d+)$/);
+  if (!m) return Promise.resolve([]);
 
-  // Extract TV sources
-  _extract_tv_sources: function(html) {
-    var sources = [];
-    var self = this;
-    
-    var seasonMatch = html.match(/<button[^>]*>Season\s+(\d+)<\/button>/);
-    var season = seasonMatch ? seasonMatch[1] : "1";
-    
-    var episodePattern = /<a\s+href="([^"]+)"[^>]*>.*?Episode\s+(\d+).*?<\/a>/g;
-    var match;
-    
-    while ((match = episodePattern.exec(html)) !== null) {
-      var url = match[1];
-      var ep = match[2];
-      
-      sources.push({
-        url: url.indexOf("http") === 0 ? url : self.baseUrl + url,
-        title: "Season " + season + " Episode " + ep,
-        type: "episode"
-      });
-    }
-    
-    return sources;
-  },
+  var type  = m[1], tmdbId = m[2];
+  // 2.1 fetch TMDB details to get exact title
+  var detailsUrl = self.tmdbBaseUrl + "/" + type + "/" + tmdbId
+                 + "?api_key=" + self.tmdbApiKey;
 
-  // Get episode sources
-  get_episode_sources: function(url) {
-    var self = this;
-    
-    return new Promise(function(resolve) {
-      fetch(url, { headers: self.headers })
-        .then(function(res) { return res.text(); })
-        .then(function(html) {
-          resolve(self._extract_movie_sources(html));
-        })
-        .catch(function() {
-          resolve([]);
-        });
+  return fetch(detailsUrl)
+    .then(function(r){ return r.json() })
+    .then(function(info){
+      var title = (type==="movie"? info.title : info.name) || "";
+      // 2.2 search Cineby.app by title
+      var cinebySearch = self.searchBaseUrl + encodeURIComponent(title);
+      return fetch(cinebySearch, { headers: self.headers });
+    })
+    .then(function(r){ return r.text() })
+    .then(function(html){
+      // find first result link
+      var m2 = html.match(/<a\s+href="([^"]+)"[^>]*class="group flex flex-col/);
+      if (!m2) throw "no-link";
+      var pageUrl = m2[1].startsWith("http")
+                  ? m2[1]
+                  : self.baseUrl + m2[1];
+      return fetch(pageUrl, { headers: self.headers });
+    })
+    .then(function(r){ return r.text() })
+    .then(function(html){
+      // decide movie vs TV
+      var isTv = /role="tablist"/.test(html) && /Season/.test(html);
+      return isTv
+        ? self._extract_tv_sources(html)
+        : self._extract_movie_sources(html);
+    })
+    .catch(function(){
+      return [];
+    });
+};
+
+// 3. GET_EPISODE_SOURCES – for a single episode URL, same extraction as a movie
+Cineby.prototype.get_episode_sources = function(url) {
+  var self = this;
+  return fetch(url, { headers: self.headers })
+    .then(function(r){ return r.text() })
+    .then(function(html){
+      return self._extract_movie_sources(html);
+    })
+    .catch(function(){
+      return [];
+    });
+};
+
+// 4. GET_SUBTITLES – Sora requires this stub even if unused
+Cineby.prototype.get_subtitles = function(url) {
+  return Promise.resolve([]);
+};
+
+// ----- internal helpers (not counted as public) -----
+Cineby.prototype._extract_movie_sources = function(html) {
+  var out = [], m, i;
+  // iframe players
+  var reIframe = /<iframe[^>]*src="([^"]+)"/g;
+  while ((m = reIframe.exec(html))) {
+    var src = m[1];
+    if (!/^https?:\/\//.test(src)) {
+      src = src.indexOf("//")===0 ? "https:" + src : this.baseUrl + src;
+    }
+    out.push({ url: src, title: "Player", type: "iframe" });
+  }
+  // direct files
+  var reFile = /file:\s*"([^"]+\.(?:mp4|m3u8))"/g;
+  i = 1;
+  while ((m = reFile.exec(html))) {
+    out.push({ url: m[1], title: "Source " + (i++), type: "direct" });
+  }
+  return out;
+};
+
+Cineby.prototype._extract_tv_sources = function(html) {
+  var out = [], m;
+  var seasonMatch = html.match(/<button[^>]*bg-gray-700[^>]*>Season\s+(\d+)<\/button>/);
+  var season = seasonMatch ? seasonMatch[1] : "1";
+  var reEp = /<a\s+href="([^"]+)"[^>]*>[^<]*Episode\s+(\d+)[^<]*<\/a>/g;
+  while ((m = reEp.exec(html))) {
+    var epUrl = m[1].startsWith("http") ? m[1] : this.baseUrl + m[1];
+    out.push({
+      url: epUrl,
+      title: "S" + season + " E" + m[2],
+      type: "episode"
     });
   }
+  return out;
 };
+
+// instantiate
+var module = new Cineby();
