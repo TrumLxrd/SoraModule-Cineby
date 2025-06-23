@@ -62,10 +62,7 @@ Cineby.prototype.get_sources = function(url) {
         var type = urlParts[urlParts.length - 2];
         var tmdbId = urlParts[urlParts.length - 1];
 
-        if (!tmdbId || !type) {
-            resolve([]);
-            return;
-        }
+        if (!tmdbId || !type) { resolve([]); return; }
 
         var tmdbUrl = "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + self.tmdb_api_key;
         fetch(tmdbUrl)
@@ -144,5 +141,4 @@ Cineby.prototype.get_episode_sources = function(url) {
     });
 };
 
-// The module must be instantiated and assigned to a 'module' variable.
 var module = new Cineby();
