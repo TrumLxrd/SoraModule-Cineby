@@ -1,15 +1,19 @@
 {
     "sourceName": "Cineby",
-    "version": "1.4.0",
-    "language": "English",
     "iconUrl": "https://www.cineby.app/favicon.ico",
-    "scriptUrl": "https://raw.githubusercontent.com/trumlxrd/SoraModule-Cineby/cineby.js",
-    "type": "shows/movies",
     "author": {
-        "name": "trumy"
+        "name": "trumy",
+        "icon": "https://avatars.githubusercontent.com/u/73558403?v=4",
+        "url": "https://github.com/trumlxrd"
     },
+    "version": "1.1.0",
+    "language": "English",
+    "streamType": "HLS",
+    "quality": "1080p",
     "baseUrl": "https://www.cineby.app",
     "searchBaseUrl": "https://api.themoviedb.org/3/search/multi?api_key=d9956abacedb5b43a16cc4864b26d451&query=%s",
-    "quality": "1080p",
-    "streamType": "HLS"
+    "scriptUrl": "https://raw.githubusercontent.com/TrumLxrd/SoraModule-Cineby/refs/heads/main/cineby.js",
+    "type": "shows/movies",
+    "asyncJS": true,
+    "softsub": false
 }
