@@ -48,25 +48,75 @@ function searchResults(html) {
 
 function extractDetails(html) {
     var details = [];
+    
+    var titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    var title = titleMatch ? titleMatch[1] : "Movie Title";
+    
+    var descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
+    var description = descMatch ? descMatch[1] : "High quality streaming on Cineby";
+    
+    var yearMatch = html.match(/(\d{4})/);
+    var airdate = yearMatch ? yearMatch[1] : "2024";
+    
     details.push({
-        description: "High quality streaming on Cineby - Watch movies and TV shows online",
-        aliases: "Cineby Movie",
-        airdate: "2024"
+        description: description,
+        aliases: title,
+        airdate: airdate
     });
+    
     return details;
 }
 
 function extractEpisodes(html) {
     var episodes = [];
-    for (var i = 1; i <= 12; i++) {
-        episodes.push({
-            href: "https://www.cineby.app/episode/" + i,
-            number: i.toString()
-        });
+    
+    var episodeRegex = /<a[^>]*href=["']([^"']*episode[^"']*)["'][^>]*>.*?(\d+).*?<\/a>/gi;
+    var match;
+    var episodeNum = 1;
+    
+    while ((match = episodeRegex.exec(html)) !== null && episodes.length < 50) {
+        var href = match[1];
+        var number = match[2] || episodeNum.toString();
+        
+        if (href) {
+            episodes.push({
+                href: href.indexOf("http") === 0 ? href : "https://www.cineby.app" + href,
+                number: number
+            });
+        }
+        episodeNum++;
     }
+    
+    if (episodes.length === 0) {
+        for (var i = 1; i <= 12; i++) {
+            episodes.push({
+                href: "https://www.cineby.app/episode/" + i,
+                number: i.toString()
+            });
+        }
+    }
+    
     return episodes;
 }
 
 function extractStreamUrl(html) {
+    var patterns = [
+        /<video[^>]*src=["']([^"']+)["']/i,
+        /<source[^>]*src=["']([^"']+)["']/i,
+        /file\s*:\s*["']([^"']+)["']/i,
+        /<iframe[^>]*src=["']([^"']+)["']/i
+    ];
+    
+    for (var i = 0; i < patterns.length; i++) {
+        var match = html.match(patterns[i]);
+        if (match && match[1]) {
+            var url = match[1];
+            if (url.indexOf("http") !== 0) {
+                url = "https://www.cineby.app" + (url.charAt(0) === "/" ? "" : "/") + url;
+            }
+            return url;
+        }
+    }
+    
     return "https://stream.cineby.app/playlist.m3u8";
 }
