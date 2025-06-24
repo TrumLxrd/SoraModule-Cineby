@@ -11,7 +11,7 @@
     "streamType": "HLS",
     "quality": "1080p",
     "baseUrl": "https://www.cineby.app",
-    "searchBaseUrl": "https://www.cineby.app/search?q=%s",
+    "searchBaseUrl": "https://www.cineby.app/search",
     "scriptUrl": "https://raw.githubusercontent.com/TrumLxrd/SoraModule-Cineby/refs/heads/main/cineby.js",
     "type": "shows/movies",
     "asyncJS": true,
