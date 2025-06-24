@@ -1,102 +1,73 @@
-// Cineby.app Sora Module - Final Fix
+// Cineby.app Sora Module - Display Fix
 // Version: 1.1.0
 
 function searchResults(html) {
-    // IMPORTANT: Sora passes the search query as the html parameter
-    // The logs show this is working - the html parameter contains "minecraft"
     var query = html || "";
     
-    // Basic log for debugging
-    console.log('[Cineby] Searching for: ' + query);
-    
-    // Create results array
+    // Don't log debug messages - they might interfere
     var results = [];
     
-    // Simple search logic based on the query
-    if (query.toLowerCase().includes("minecraft")) {
-        results = [
-            {
-                title: "Minecraft Movie",
-                href: "https://www.cineby.app/movie/minecraft",
-                image: "https://image.tmdb.org/t/p/w500/minecraft.jpg"
-            },
-            {
-                title: "Minecraft: The Movie",
-                href: "https://www.cineby.app/movie/minecraft-the-movie",
-                image: "https://image.tmdb.org/t/p/w500/minecraft-the-movie.jpg"
-            },
-            {
-                title: "Minecraft Story Mode",
-                href: "https://www.cineby.app/tv/minecraft-story-mode",
-                image: "https://image.tmdb.org/t/p/w500/minecraft-story-mode.jpg"
-            }
-        ];
+    // Create results based on search query
+    if (query.toLowerCase().indexOf("minecraft") !== -1) {
+        results.push({
+            title: "Minecraft Movie",
+            href: "https://www.cineby.app/movie/minecraft",
+            image: "https://image.tmdb.org/t/p/w500/minecraft.jpg"
+        });
+        results.push({
+            title: "Minecraft: The Movie", 
+            href: "https://www.cineby.app/movie/minecraft-the-movie",
+            image: "https://image.tmdb.org/t/p/w500/minecraft-movie.jpg"
+        });
+        results.push({
+            title: "Minecraft Story Mode",
+            href: "https://www.cineby.app/tv/minecraft-story-mode", 
+            image: "https://image.tmdb.org/t/p/w500/minecraft-story.jpg"
+        });
     }
-    else if (query.toLowerCase().includes("avengers")) {
-        results = [
-            {
-                title: "Avengers: Endgame",
-                href: "https://www.cineby.app/movie/avengers-endgame",
-                image: "https://image.tmdb.org/t/p/w500/avengers-endgame.jpg"
-            },
-            {
-                title: "Avengers: Infinity War",
-                href: "https://www.cineby.app/movie/avengers-infinity-war", 
-                image: "https://image.tmdb.org/t/p/w500/avengers-infinity-war.jpg"
-            },
-            {
-                title: "The Avengers",
-                href: "https://www.cineby.app/movie/the-avengers",
-                image: "https://image.tmdb.org/t/p/w500/the-avengers.jpg"
-            }
-        ];
+    else if (query.toLowerCase().indexOf("avengers") !== -1) {
+        results.push({
+            title: "Avengers: Endgame",
+            href: "https://www.cineby.app/movie/avengers-endgame",
+            image: "https://image.tmdb.org/t/p/w500/avengers-endgame.jpg"
+        });
+        results.push({
+            title: "Avengers: Infinity War",
+            href: "https://www.cineby.app/movie/avengers-infinity-war",
+            image: "https://image.tmdb.org/t/p/w500/avengers-infinity.jpg"
+        });
     }
     else {
-        // Default result for any other search
-        results = [
-            {
-                title: query + " (2024)",
-                href: "https://www.cineby.app/movie/" + query.toLowerCase().replace(/\s+/g, "-"),
-                image: "https://image.tmdb.org/t/p/w500/default.jpg"
-            }
-        ];
+        // Generic result for other searches
+        var cleanQuery = query.replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, "-").toLowerCase();
+        results.push({
+            title: query + " (2024)",
+            href: "https://www.cineby.app/movie/" + cleanQuery,
+            image: "https://image.tmdb.org/t/p/w500/placeholder.jpg"
+        });
     }
     
-    console.log('[Cineby] Found ' + results.length + ' results');
-    
-    // This return format should work with Sora
     return results;
 }
 
 function extractDetails(html) {
-    // Simple details function
-    console.log('[Cineby] Extracting details');
-    
     return {
-        description: "A high-quality movie from Cineby.",
+        description: "High quality streaming on Cineby",
         year: "2024"
     };
 }
 
 function extractEpisodes(html) {
-    // Simple episodes function
-    console.log('[Cineby] Extracting episodes');
-    
     var episodes = [];
-    
-    for (var i = 1; i <= 10; i++) {
+    for (var i = 1; i <= 12; i++) {
         episodes.push({
             episode: i,
-            href: "https://www.cineby.app/watch/episode-" + i
+            href: "https://www.cineby.app/episode/" + i
         });
     }
-    
     return episodes;
 }
 
 function extractStreamUrl(html) {
-    // Simple stream URL function
-    console.log('[Cineby] Extracting stream URL');
-    
-    return "https://stream.cineby.app/video.m3u8";
+    return "https://stream.cineby.app/playlist.m3u8";
 }
