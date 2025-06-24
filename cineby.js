@@ -1,7 +1,12 @@
-// Cineby.app Sora Module - Regex Only Version
-// Version: 1.0.0
+// Cineby.app Sora Module - Final Version
+// Version: 1.1.0
 
-// Utility function to clean titles using regex
+// Debug logging function
+function debugLog(message, data) {
+    console.log('[Cineby Debug] ' + message, data || '');
+}
+
+// Utility function to clean titles
 function cleanTitle(title) {
     if (!title) return '';
     return title
@@ -10,14 +15,15 @@ function cleanTitle(title) {
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
-        .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec))
+        .replace(/&#(\d+);/g, function(match, dec) { return String.fromCharCode(dec); })
         .replace(/<[^>]*>/g, '')
         .replace(/\s+/g, ' ')
         .trim();
 }
 
-// Utility function to convert relative URLs to absolute using regex
+// Utility function to make absolute URLs
 function makeAbsoluteUrl(url, baseUrl) {
+    if (!baseUrl) baseUrl = 'https://www.cineby.app';
     if (!url) return '';
     if (/^https?:\/\//.test(url)) return url;
     if (/^\/\//.test(url)) return 'https:' + url;
@@ -25,252 +31,334 @@ function makeAbsoluteUrl(url, baseUrl) {
     return baseUrl + '/' + url;
 }
 
-// Search for movies and TV shows using regex only
+// Search for movies and TV shows
 function searchResults(html) {
-    const results = [];
+    debugLog('Starting search results extraction');
+    debugLog('HTML length:', html.length);
+    debugLog('HTML sample (first 500 chars):', html.substring(0, 500));
     
-    // Regex patterns for finding movie/show containers
-    const containerPatterns = [
-        /<div[^>]*class="[^"]*(?:movie|film|show|card|item)[^"]*"[^>]*>.*?<\/div>/gis,
-        /<article[^>]*class="[^"]*(?:movie|film|show|card|item)[^"]*"[^>]*>.*?<\/article>/gis,
-        /<li[^>]*class="[^"]*(?:movie|film|show|card|item)[^"]*"[^>]*>.*?<\/li>/gis,
-        /<div[^>]*class="[^"]*(?:col|grid|flex)[^"]*"[^>]*>.*?<a[^>]*href="[^"]*"[^>]*>.*?<\/a>.*?<\/div>/gis
-    ];
+    var results = [];
     
-    for (const pattern of containerPatterns) {
-        const matches = html.match(pattern) || [];
+    try {
+        // Primary approach - look for movie/show containers
+        var containerPatterns = [
+            /<div[^>]*class="[^"]*(?:movie|film|show|card|item|result)[^"]*"[^>]*>.*?<\/div>/gis,
+            /<article[^>]*>.*?<\/article>/gis,
+            /<li[^>]*class="[^"]*(?:movie|film|show|item)[^"]*"[^>]*>.*?<\/li>/gis
+        ];
         
-        for (const match of matches) {
-            // Extract title using regex
-            const titleRegex = /<(?:h[1-6]|div|span|p|a)[^>]*(?:class="[^"]*(?:title|name)[^"]*"|title="[^"]*")[^>]*>(.*?)<\/(?:h[1-6]|div|span|p|a)>/i;
-            const titleMatch = match.match(titleRegex) || match.match(/<a[^>]*title="([^"]*)"[^>]*>/i) || match.match(/<img[^>]*alt="([^"]*)"[^>]*>/i);
+        for (var i = 0; i < containerPatterns.length; i++) {
+            var pattern = containerPatterns[i];
+            var matches = html.match(pattern) || [];
+            debugLog('Found ' + matches.length + ' containers with pattern');
             
-            // Extract href using regex
-            const hrefRegex = /<a[^>]*href="([^"]*)"[^>]*>/i;
-            const hrefMatch = match.match(hrefRegex);
-            
-            // Extract image using regex
-            const imgRegex = /<img[^>]*src="([^"]*)"[^>]*>/i;
-            const imgMatch = match.match(imgRegex);
-            
-            if (titleMatch && hrefMatch) {
-                const title = cleanTitle(titleMatch[1]);
-                const href = makeAbsoluteUrl(hrefMatch[1], 'https://www.cineby.app');
-                const image = imgMatch ? makeAbsoluteUrl(imgMatch[1], 'https://www.cineby.app') : '';
+            for (var j = 0; j < matches.length; j++) {
+                var match = matches[j];
                 
-                if (title && href && !results.some(r => r.href === href)) {
-                    results.push({ title, image, href });
+                // Extract title
+                var titlePatterns = [
+                    /<h[1-6][^>]*>(.*?)<\/h[1-6]>/i,
+                    /<[^>]*class="[^"]*title[^"]*"[^>]*>(.*?)<\/[^>]*>/i,
+                    /<a[^>]*title="([^"]*)"[^>]*>/i,
+                    /<img[^>]*alt="([^"]*)"[^>]*>/i
+                ];
+                
+                var title = '';
+                for (var k = 0; k < titlePatterns.length; k++) {
+                    var titleMatch = match.match(titlePatterns[k]);
+                    if (titleMatch && titleMatch[1]) {
+                        title = cleanTitle(titleMatch[1]);
+                        break;
+                    }
+                }
+                
+                // Extract href
+                var hrefMatch = match.match(/<a[^>]*href="([^"]*)"[^>]*>/i);
+                var href = hrefMatch ? makeAbsoluteUrl(hrefMatch[1]) : '';
+                
+                // Extract image
+                var imgMatch = match.match(/<img[^>]*src="([^"]*)"[^>]*>/i);
+                var image = imgMatch ? makeAbsoluteUrl(imgMatch[1]) : '';
+                
+                if (title && href && title.length > 2) {
+                    results.push({ title: title, image: image, href: href });
+                }
+            }
+            
+            if (results.length > 0) break;
+        }
+        
+        // Fallback approach - simple link extraction
+        if (results.length === 0) {
+            debugLog('Using fallback link extraction');
+            
+            var linkRegex = /<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
+            var match;
+            
+            while ((match = linkRegex.exec(html)) !== null) {
+                var href = match[1];
+                var linkContent = match[2];
+                
+                // Filter out navigation and utility links
+                if (href && 
+                    href.indexOf('#') === -1 && 
+                    href.indexOf('javascript:') === -1 && 
+                    href.indexOf('mailto:') === -1 &&
+                    href.indexOf('/search') === -1 &&
+                    href.indexOf('/login') === -1 &&
+                    href.indexOf('/register') === -1 &&
+                    href.indexOf('/contact') === -1 &&
+                    linkContent.length > 2) {
+                    
+                    var title = cleanTitle(linkContent);
+                    
+                    if (title && title.length > 2 && !/^(home|about|contact|login|register)$/i.test(title)) {
+                        var fullHref = makeAbsoluteUrl(href);
+                        
+                        // Look for nearby image
+                        var linkIndex = html.indexOf(match[0]);
+                        var contextStart = Math.max(0, linkIndex - 300);
+                        var contextEnd = Math.min(html.length, linkIndex + 300);
+                        var context = html.substring(contextStart, contextEnd);
+                        
+                        var imgMatch = context.match(/<img[^>]*src="([^"]*)"[^>]*>/i);
+                        var image = imgMatch ? makeAbsoluteUrl(imgMatch[1]) : '';
+                        
+                        results.push({
+                            title: title,
+                            image: image,
+                            href: fullHref
+                        });
+                    }
                 }
             }
         }
         
-        if (results.length > 0) break;
-    }
-    
-    // Fallback: Extract from JSON-LD using regex
-    if (results.length === 0) {
-        const jsonLdRegex = /<script[^>]*type="application\/ld\+json"[^>]*>(.*?)<\/script>/gis;
-        const jsonMatches = html.match(jsonLdRegex) || [];
-        
-        for (const jsonMatch of jsonMatches) {
-            const jsonContent = jsonMatch.replace(/<script[^>]*>/i, '').replace(/<\/script>/i, '');
+        // Third approach - look for structured data
+        if (results.length === 0) {
+            debugLog('Trying structured data extraction');
             
-            // Extract movie/show data using regex
-            const nameRegex = /"name"\s*:\s*"([^"]*)"/i;
-            const urlRegex = /"url"\s*:\s*"([^"]*)"/i;
-            const imageRegex = /"image"\s*:\s*"([^"]*)"/i;
-            const typeRegex = /"@type"\s*:\s*"(Movie|TVSeries)"/i;
+            var jsonLdRegex = /<script[^>]*type="application\/ld\+json"[^>]*>(.*?)<\/script>/gis;
+            var jsonMatches = html.match(jsonLdRegex) || [];
             
-            const nameMatch = jsonContent.match(nameRegex);
-            const urlMatch = jsonContent.match(urlRegex);
-            const imageMatch = jsonContent.match(imageRegex);
-            const typeMatch = jsonContent.match(typeRegex);
-            
-            if (nameMatch && urlMatch && typeMatch) {
-                results.push({
-                    title: cleanTitle(nameMatch[1]),
-                    image: imageMatch ? makeAbsoluteUrl(imageMatch[1], 'https://www.cineby.app') : '',
-                    href: makeAbsoluteUrl(urlMatch[1], 'https://www.cineby.app')
-                });
+            for (var i = 0; i < jsonMatches.length; i++) {
+                var jsonMatch = jsonMatches[i];
+                var jsonContent = jsonMatch.replace(/<script[^>]*>/i, '').replace(/<\/script>/i, '');
+                
+                var nameMatch = jsonContent.match(/"name"\s*:\s*"([^"]*)"/i);
+                var urlMatch = jsonContent.match(/"url"\s*:\s*"([^"]*)"/i);
+                var imageMatch = jsonContent.match(/"image"\s*:\s*"([^"]*)"/i);
+                var typeMatch = jsonContent.match(/"@type"\s*:\s*"(Movie|TVSeries)"/i);
+                
+                if (nameMatch && urlMatch && typeMatch) {
+                    results.push({
+                        title: cleanTitle(nameMatch[1]),
+                        image: imageMatch ? makeAbsoluteUrl(imageMatch[1]) : '',
+                        href: makeAbsoluteUrl(urlMatch[1])
+                    });
+                }
             }
         }
+        
+        // Remove duplicates
+        var uniqueResults = [];
+        for (var i = 0; i < results.length; i++) {
+            var result = results[i];
+            var isDuplicate = false;
+            for (var j = 0; j < uniqueResults.length; j++) {
+                if (uniqueResults[j].href === result.href || uniqueResults[j].title === result.title) {
+                    isDuplicate = true;
+                    break;
+                }
+            }
+            if (!isDuplicate) {
+                uniqueResults.push(result);
+            }
+        }
+        
+        debugLog('Found ' + uniqueResults.length + ' unique results');
+        if (uniqueResults.length > 0) {
+            debugLog('Sample results:', uniqueResults.slice(0, 3));
+        }
+        
+        return uniqueResults.slice(0, 20); // Limit to 20 results
+        
+    } catch (error) {
+        debugLog('Error in searchResults:', error.message);
+        return [];
     }
-    
-    return results;
 }
 
-// Extract details from movie/show page using regex only
+// Extract details from movie/show page
 function extractDetails(html) {
-    const details = {};
+    debugLog('Extracting details from page');
     
-    // Extract description using regex
-    const descPatterns = [
-        /<meta[^>]*name="description"[^>]*content="([^"]*)"[^>]*>/i,
-        /<(?:div|p|span)[^>]*class="[^"]*(?:description|summary|plot|overview)[^"]*"[^>]*>(.*?)<\/(?:div|p|span)>/is,
-        /<(?:div|p)[^>]*id="[^"]*(?:description|summary|plot)[^"]*"[^>]*>(.*?)<\/(?:div|p)>/is
-    ];
+    var details = {};
     
-    for (const pattern of descPatterns) {
-        const match = html.match(pattern);
-        if (match && match[1]) {
-            details.description = cleanTitle(match[1]);
-            break;
+    try {
+        // Extract description
+        var descPatterns = [
+            /<meta[^>]*name="description"[^>]*content="([^"]*)"[^>]*>/i,
+            /<meta[^>]*property="og:description"[^>]*content="([^"]*)"[^>]*>/i,
+            /<[^>]*class="[^"]*(?:description|summary|plot|overview)[^"]*"[^>]*>(.*?)<\/[^>]*>/is
+        ];
+        
+        for (var i = 0; i < descPatterns.length; i++) {
+            var match = html.match(descPatterns[i]);
+            if (match && match[1]) {
+                details.description = cleanTitle(match[1]);
+                break;
+            }
         }
-    }
-    
-    // Extract alternative title using regex
-    const altTitlePatterns = [
-        /<(?:div|span|p)[^>]*class="[^"]*(?:alt-title|original-title|subtitle)[^"]*"[^>]*>(.*?)<\/(?:div|span|p)>/i,
-        /<meta[^>]*property="og:title:alt"[^>]*content="([^"]*)"[^>]*>/i
-    ];
-    
-    for (const pattern of altTitlePatterns) {
-        const match = html.match(pattern);
-        if (match && match[1]) {
-            details.altTitle = cleanTitle(match[1]);
-            break;
+        
+        // Extract year
+        var yearPatterns = [
+            /<meta[^>]*property="video:release_date"[^>]*content="(\d{4})[^"]*"[^>]*>/i,
+            /<[^>]*class="[^"]*(?:year|date|release)[^"]*"[^>]*>.*?(\d{4}).*?<\/[^>]*>/i,
+            /(\d{4})/
+        ];
+        
+        for (var i = 0; i < yearPatterns.length; i++) {
+            var match = html.match(yearPatterns[i]);
+            if (match && match[1]) {
+                details.year = match[1];
+                break;
+            }
         }
-    }
-    
-    // Extract year using regex
-    const yearPatterns = [
-        /<(?:div|span)[^>]*class="[^"]*(?:year|date|release)[^"]*"[^>]*>.*?(\d{4}).*?<\/(?:div|span)>/i,
-        /<meta[^>]*property="video:release_date"[^>]*content="(\d{4})[^"]*"[^>]*>/i,
-        /(?:year|release|date)[^>]*>.*?(\d{4})/i
-    ];
-    
-    for (const pattern of yearPatterns) {
-        const match = html.match(pattern);
-        if (match && match[1]) {
-            details.year = match[1];
-            break;
+        
+        // Extract title
+        var titlePatterns = [
+            /<meta[^>]*property="og:title"[^>]*content="([^"]*)"[^>]*>/i,
+            /<title>([^<]*)<\/title>/i,
+            /<h1[^>]*>(.*?)<\/h1>/i
+        ];
+        
+        for (var i = 0; i < titlePatterns.length; i++) {
+            var match = html.match(titlePatterns[i]);
+            if (match && match[1]) {
+                details.title = cleanTitle(match[1]);
+                break;
+            }
         }
-    }
-    
-    // Extract rating using regex
-    const ratingRegex = /<(?:div|span)[^>]*class="[^"]*(?:rating|score)[^"]*"[^>]*>.*?(\d+(?:\.\d+)?).*?<\/(?:div|span)>/i;
-    const ratingMatch = html.match(ratingRegex);
-    if (ratingMatch) {
-        details.rating = ratingMatch[1];
+        
+        debugLog('Extracted details:', details);
+        
+    } catch (error) {
+        debugLog('Error in extractDetails:', error.message);
     }
     
     return details;
 }
 
-// Extract episode links for TV shows using regex only
+// Extract episode links for TV shows
 function extractEpisodes(html) {
-    const episodes = [];
+    debugLog('Extracting episodes');
     
-    // Regex patterns for episode links
-    const episodePatterns = [
-        /<a[^>]*href="([^"]*)"[^>]*>.*?(?:episode|ep)[\s\-]*(\d+).*?<\/a>/gi,
-        /<(?:div|li)[^>]*class="[^"]*episode[^"]*"[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>.*?(\d+).*?<\/a>.*?<\/(?:div|li)>/gi,
-        /<a[^>]*href="([^"]*)"[^>]*class="[^"]*episode[^"]*"[^>]*>.*?(\d+).*?<\/a>/gi
-    ];
+    var episodes = [];
     
-    for (const pattern of episodePatterns) {
-        let match;
-        while ((match = pattern.exec(html)) !== null) {
-            const url = makeAbsoluteUrl(match[1], 'https://www.cineby.app');
-            const episodeNum = parseInt(match[2]);
-            
-            if (url && episodeNum && !episodes.some(ep => ep.episode === episodeNum)) {
-                episodes.push({
-                    episode: episodeNum,
-                    href: url
-                });
-            }
-        }
-    }
-    
-    // Fallback: numbered links using regex
-    if (episodes.length === 0) {
-        const numberedLinkRegex = /<a[^>]*href="([^"]*)"[^>]*>.*?(\d+).*?<\/a>/gi;
-        let match;
-        let episodeCounter = 1;
+    try {
+        // Look for episode patterns
+        var episodePatterns = [
+            /<a[^>]*href="([^"]*)"[^>]*>.*?(?:episode|ep)[\s\-]*(\d+).*?<\/a>/gi,
+            /<[^>]*class="[^"]*episode[^"]*"[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>.*?(\d+).*?<\/a>/gi,
+            /<a[^>]*href="([^"]*)"[^>]*>.*?(\d+).*?<\/a>/gi
+        ];
         
-        while ((match = numberedLinkRegex.exec(html)) !== null) {
-            const url = makeAbsoluteUrl(match[1], 'https://www.cineby.app');
-            const number = parseInt(match[2]);
+        for (var i = 0; i < episodePatterns.length; i++) {
+            var pattern = episodePatterns[i];
+            var match;
+            while ((match = pattern.exec(html)) !== null) {
+                var href = match[1];
+                var episodeNum = parseInt(match[2]);
+                
+                if (href && episodeNum && href.indexOf('#') === -1) {
+                    var url = makeAbsoluteUrl(href);
+                    
+                    var isDuplicate = false;
+                    for (var j = 0; j < episodes.length; j++) {
+                        if (episodes[j].episode === episodeNum || episodes[j].href === url) {
+                            isDuplicate = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!isDuplicate) {
+                        episodes.push({
+                            episode: episodeNum,
+                            href: url
+                        });
+                    }
+                }
+            }
             
-            if (url && number && /(?:watch|play|episode|ep)/i.test(match[0])) {
-                episodes.push({
-                    episode: number || episodeCounter++,
-                    href: url
-                });
-            }
+            if (episodes.length > 0) break;
         }
+        
+        debugLog('Found ' + episodes.length + ' episodes');
+        
+        // Sort episodes by number
+        episodes.sort(function(a, b) { return a.episode - b.episode; });
+        
+        return episodes;
+        
+    } catch (error) {
+        debugLog('Error in extractEpisodes:', error.message);
+        return [];
     }
-    
-    return episodes.sort((a, b) => a.episode - b.episode);
 }
 
-// Extract stream URL from video page using regex only
+// Extract stream URL from video page
 function extractStreamUrl(html) {
-    // Direct video source patterns using regex
-    const videoPatterns = [
-        /<video[^>]*>.*?<source[^>]*src="([^"]*\.(?:mp4|m3u8|webm))"[^>]*>/is,
-        /<video[^>]*src="([^"]*\.(?:mp4|m3u8|webm))"[^>]*>/i,
-        /(?:file|source|src)\s*:\s*["']([^"']*\.(?:mp4|m3u8|webm))[^"']*/i,
-        /["'](?:file|source|src)["']\s*:\s*["']([^"']*\.(?:mp4|m3u8|webm))[^"']*/i,
-        /video_url\s*[:=]\s*["']([^"']*)[^"']*/i,
-        /stream_url\s*[:=]\s*["']([^"']*)[^"']*/i
-    ];
+    debugLog('Extracting stream URL');
+    debugLog('HTML length for stream extraction:', html.length);
     
-    for (const pattern of videoPatterns) {
-        const match = html.match(pattern);
-        if (match && match[1]) {
-            const url = makeAbsoluteUrl(match[1], 'https://www.cineby.app');
-            if (/\.(?:mp4|m3u8|webm)(?:\?|$)/i.test(url)) {
-                return url;
+    try {
+        // Video source patterns
+        var patterns = [
+            // Direct video sources
+            /<video[^>]*>.*?<source[^>]*src="([^"]*\.(?:mp4|m3u8|webm))"[^>]*>/is,
+            /<video[^>]*src="([^"]*\.(?:mp4|m3u8|webm))"[^>]*>/i,
+            
+            // JavaScript variables
+            /(?:file|source|src|video_url|stream_url)\s*[:=]\s*["']([^"']*\.(?:mp4|m3u8|webm))[^"']*/i,
+            /["'](?:file|source|src)["']\s*:\s*["']([^"']*\.(?:mp4|m3u8|webm))[^"']*/i,
+            
+            // Generic patterns
+            /src\s*[:=]\s*["']([^"']*)[^"']*/i,
+            /file\s*[:=]\s*["']([^"']*)[^"']*/i,
+            
+            // Iframe sources
+            /<iframe[^>]*src="([^"]*)"[^>]*>/i,
+            
+            // Data attributes
+            /data-(?:src|url|stream|file)="([^"]*)"[^>]*>/i
+        ];
+        
+        for (var i = 0; i < patterns.length; i++) {
+            var match = html.match(patterns[i]);
+            if (match && match[1]) {
+                var url = makeAbsoluteUrl(match[1]);
+                debugLog('Found potential stream URL:', url);
+                
+                // Prefer direct video files
+                if (/\.(?:mp4|m3u8|webm)(?:\?|$)/i.test(url)) {
+                    debugLog('Returning video file URL:', url);
+                    return url;
+                }
+                
+                // Return first valid URL found
+                if (url.indexOf('http') === 0) {
+                    debugLog('Returning stream URL:', url);
+                    return url;
+                }
             }
         }
+        
+        debugLog('No stream URL found');
+        return '';
+        
+    } catch (error) {
+        debugLog('Error in extractStreamUrl:', error.message);
+        return '';
     }
-    
-    // Iframe source using regex
-    const iframeRegex = /<iframe[^>]*src="([^"]*)"[^>]*>/i;
-    const iframeMatch = html.match(iframeRegex);
-    if (iframeMatch) {
-        return makeAbsoluteUrl(iframeMatch[1], 'https://www.cineby.app');
-    }
-    
-    // Data attributes using regex
-    const dataPatterns = [
-        /data-(?:src|url|stream|file)="([^"]*)"[^>]*>/i,
-        /data-video-src="([^"]*)"[^>]*>/i,
-        /data-player-url="([^"]*)"[^>]*>/i
-    ];
-    
-    for (const pattern of dataPatterns) {
-        const match = html.match(pattern);
-        if (match && match[1]) {
-            return makeAbsoluteUrl(match[1], 'https://www.cineby.app');
-        }
-    }
-    
-    // JavaScript variable patterns using regex
-    const jsPatterns = [
-        /var\s+(?:video_url|stream_url|file)\s*=\s*["']([^"']*)[^"']*/i,
-        /(?:videoUrl|streamUrl|fileUrl)\s*[:=]\s*["']([^"']*)[^"']*/i,
-        /player\.src\s*=\s*["']([^"']*)[^"']*/i
-    ];
-    
-    for (const pattern of jsPatterns) {
-        const match = html.match(pattern);
-        if (match && match[1]) {
-            return makeAbsoluteUrl(match[1], 'https://www.cineby.app');
-        }
-    }
-    
-    return '';
-}
-
-// Export functions for Sora
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        searchResults,
-        extractDetails,
-        extractEpisodes,
-        extractStreamUrl
-    };
 }
